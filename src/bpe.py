@@ -6,7 +6,7 @@ UTF-8 byte-level BPE 토크나이저 과제 템플릿.
 한국어 NSMC 리뷰를 다루므로 문자열을 글자/공백 단위로 먼저 자르지 말고,
 항상 `text.encode("utf-8")`로 byte ID 시퀀스를 만든 뒤 merge를 적용하세요.
 """
-
+from importlib.metadata import Pair
 from pathlib import Path
 import json
 PAD_TOKEN = "<pad>"
@@ -206,7 +206,20 @@ class BPETokenizer:
             merge_id = self.token_to_id.get(pair)
             if merge_id is None:
                 continue
+            merged = []
+            i = 0
+            while i < len(ids):
+                if i < len(ids) - 1 and (ids[i], ids[i + 1]) == pair:
+                    merged.append(merge_id)
+                    i = i + 2
+                else:
+                    merged.append(ids[i])
+                    i = i + 1
+            ids = merged
 
+        if add_bos_eos:
+            ids = [self.get_bos_id()] + ids + [self.get_eos_id()]
+        return ids
     def decode(self, ids: list[int], skip_special: bool = True) -> str:
         """
         TODO: token ID 리스트를 문자열로 복원합니다.
