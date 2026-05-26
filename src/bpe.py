@@ -9,6 +9,9 @@ UTF-8 byte-level BPE 토크나이저 과제 템플릿.
 from importlib.metadata import Pair
 from pathlib import Path
 import json
+
+from mpmath import extend
+
 PAD_TOKEN = "<pad>"
 UNK_TOKEN = "<unk>"
 BOS_TOKEN = "<bos>"
@@ -222,10 +225,29 @@ class BPETokenizer:
         return ids
     def decode(self, ids: list[int], skip_special: bool = True) -> str:
         """
-        TODO: token ID 리스트를 문자열로 복원합니다.
+         token ID 리스트를 문자열로 복원합니다.
 
         주의:
         - merge token은 원본 byte token까지 재귀적으로 펼칩니다.
         - byte를 하나씩 decode하지 말고, 마지막에 `bytes(...).decode("utf-8")`를 한 번만 호출합니다.
         """
-        raise NotImplementedError("BPETokenizer.decode를 구현하세요.")
+        byte_values = []
+
+        for token_id in ids:
+            if skip_special and token_id in SPECIAL_IDS.values():
+                continue
+            byte_values.extend(self._token_to_bytes(token_id))
+        return bytes(byte_values).decode("utf-8", errors="replace")
+
+
+    def _token_to_bytes(self, token_id: int) -> list[int]:
+        token = self.id_to_token.get(token_id)
+
+        if isinstance(token, bytes):
+            return list(token)
+        if isinstance(token, tuple):
+            out = []
+            for child_id in token:
+                out.extend(self._token_to_bytes(child_id))
+            return out
+        return []
