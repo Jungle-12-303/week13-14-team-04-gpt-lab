@@ -27,6 +27,11 @@ class BPETokenizer:
 
     권장 ID 배치:
     - 0~3: <pad>, <unk>, <bos>, <eos>
+    <pad>: 패딩 토큰
+    <unk>: 어휘 사전에 없는 단어 
+    <bos>: 텍스트 시작
+    <eos>: 텍스트 끝 
+
     - 4~259: 원본 byte 0~255
     - 260 이상: BPE merge로 생성한 토큰
     """
@@ -43,7 +48,15 @@ class BPETokenizer:
         1. 특수 토큰 4개를 고정 ID 0~3에 등록합니다.
         2. byte 0~255를 ID 4~259에 bytes([byte_value]) 형태로 등록합니다.
         """
-        raise NotImplementedError("_init_special_tokens를 구현하세요.")
+        # SPECIAL_IDS[0] = PAD_TOKEN
+        # SPECIAL_IDS[1] = UNK_TOKEN
+        # SPECIAL_IDS[2] = BOS_TOKEN
+        # SPECIAL_IDS[3] = EOS_TOKEN
+
+        for i in range(0, BYTE_OFFSET):
+            SPECIAL_IDS[i] = SPECIAL_TOKENS[i]
+            
+        # raise NotImplementedError("_init_special_tokens를 구현하세요.")
 
     def get_pad_id(self):
         """padding 토큰 ID."""
