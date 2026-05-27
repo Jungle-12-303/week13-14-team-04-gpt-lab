@@ -49,19 +49,19 @@ class BPETokenizer:
         2. byte 0~255를 ID 4~259에 bytes([byte_value]) 형태로 등록합니다.
         """
         # SPECIAL_IDS에 들어가 있는 특수 토큰들을 id_to_token(encode), token_to_id(decode)로 넣어준다
-        for index, item in SPECIAL_IDS.items():
+        for token, token_id in SPECIAL_IDS.items():
             # id_to_token와 token_to_id는 항상 짝!!!! 함께 넣어주기 
-            self.id_to_token[index] = item
-            self.token_to_id[index] = item
+            self.id_to_token[token_id] = token
+            self.token_to_id[token] = token_id
 
         # bytes([byte_value]) 형태로 등록 -> 순회하면서 byte_value 값이 바뀌어야 한다
-        for index in range(4, NUM_BYTES + BYTE_OFFSET):
+        for token_id in range(4, NUM_BYTES + BYTE_OFFSET):
             # 인덱스 값으로 보정 
-            byte_value = index - BYTE_OFFSET
+            byte_value = token_id - BYTE_OFFSET
 
             # id_to_token와 token_to_id는 항상 짝!!!! 함께 넣어주기 
-            self.id_to_token[index] = bytes([byte_value])
-            self.token_to_id[index] = bytes([byte_value])
+            self.id_to_token[token_id] = bytes([byte_value])
+            self.token_to_id[bytes([byte_value])] = token_id
 
         # raise NotImplementedError("_init_special_tokens를 구현하세요.")
 
