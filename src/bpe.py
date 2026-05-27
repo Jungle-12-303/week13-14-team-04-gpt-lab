@@ -99,6 +99,11 @@ class BPETokenizer:
 
         시퀀스: 현재 corpus를 표현하는 token ID 리스트
         """
+        # 기존 상태 초기화 
+        self.id_to_token = {}
+        self.token_to_id = {}
+        self.merges = []
+
         # 기본 token 등록을 위해 _init_special_tokens() 호출 
         self._init_special_tokens()
 
@@ -220,7 +225,7 @@ class BPETokenizer:
 
     def save(self, path: str | Path):
         """
-        TODO: vocabulary와 merge rule을 JSON 파일로 저장합니다.
+        vocabulary와 merge rule을 JSON 파일로 저장합니다.
 
         bytes와 tuple은 JSON에 바로 저장할 수 없으므로 type 정보를 함께 저장하세요.
         -> bytes는 정수 리스트로 바꿔서 저장 => list[int]
@@ -257,17 +262,17 @@ class BPETokenizer:
 
             # token이 str일 때
             if isinstance(item[1], str):
-                token_dict["type"] = "str"
+                token_dict["token_type"] = "str"
                 token_dict["value"] = item[1]
 
             # token이 bytes일 때 
             elif isinstance(item[1], bytes):
-                token_dict["type"]  = "bytes"
+                token_dict["token_type"]  = "bytes"
                 token_dict["value"] = list(item[1])
 
             # token이 tuple일 때 
             elif isinstance(item[1], tuple):
-                token_dict["type"]  = "tuple"
+                token_dict["token_type"]  = "tuple"
                 token_dict["value"] = list(item[1])
 
             token_list.append(token_dict)
@@ -287,14 +292,75 @@ class BPETokenizer:
 
     def load(self, path: str | Path):
         """
-        TODO: save()로 저장한 JSON 파일을 읽어 vocabulary와 merge rule을 복원합니다.
-        """
+        save()로 저장한 JSON 파일을 읽어 vocabulary와 merge rule(tokenizer 상태)을 복원합니다.
 
-        raise NotImplementedError("BPETokenizer.load를 구현하세요.")
+        복원해야 하는 요소 
+        self.vocab_size
+        self.id_to_token
+        self.token_to_id -> id_to_token 복원하고 다시 만들기 
+        self.merges
+        """
+        # load 함수에서 Path를 사용할 수 있게 처리 
+        path = Path(path)
+
+        # json 파일 내용을 읽고 저장할 딕셔너리 
+        data = {}
+
+        # json 파일을 열고 data에 저장 
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        # vocab_size 복원
+        self.vocab_size = data["vocab_size"]
+
+        # 나머지 요소 빈 상태로 초기화 
+        # __init__ 함수는 객체 생성 시점에 초기화 하는 생성자 초기화 메서드라 함수 쓰는 것보다 그냥 수동 초기화가 나음 
+        self.id_to_token = {}
+        self.token_to_id = {}
+        self.merges = []
+
+        # print(data)
+        #for dict in range(0, len(data["id_to_token"])):
+        for item in data["id_to_token"]:
+            token_type = item["token_type"]
+            value = item["value"]
+
+            # token_type이 str일 때 
+            if token_type == "str":
+                # token 값 그대로 받음
+                token = value
+
+            # token_type이 bytes일 때 
+            elif token_type == "bytes":
+                # token 값 bytes 객체로 변환
+                # value는 리스트로 저장되어서 ([value]) 아님 
+                token = bytes(value)
+
+            # token_type이 tuple일 때 
+            elif token_type == "tuple":
+                # token 값 tuple 객체로 변환
+                token = tuple(value)
+
+            # id는 str로 save 했으니 int로 형 변환
+            token_id = int(item["id"])
+
+            # token_id라는 key에 token이라는 value를 넣는다
+            # -> id_to_token 매핑 복원
+            self.id_to_token[token_id] = token
+
+            # token이라는 key에 token_id라는 value를 넣는다
+            # -> token_to_id 매핑 복원
+            self.token_to_id[token] = token_id
+
+        # -- merge 복원 -- 
+        # save에서 리스트로 저장된 merge 튜플로 변환 
+        self.merges = [tuple(merge) for merge in data["merges"]]
+
+        # raise NotImplementedError("BPETokenizer.load를 구현하세요.")
 
     def encode(self, text: str, add_bos_eos: bool = False) -> list[int]:
         """
-        TODO: 문자열을 token ID 리스트로 변환합니다.
+        문자열을 token ID 리스트로 변환합니다.
 
         구현 힌트:
         - 먼저 UTF-8 byte ID 리스트를 만듭니다.
@@ -322,20 +388,27 @@ class BPETokenizer:
             # --- FIXME: 헬퍼 함수로 리팩토링 하기 ---
             # 나중에 현재 sequence로 한 번에 치환할 새로운 리스트 
             new_sequence = []
-            
+
             # tuple unpacking 사용 
             left_token_id, right_token_id = pair
-        
+            
             # pair의 두 token_id로 token을 얻음
             left_token = self.id_to_token[left_token_id]
             right_token = self.id_to_token[right_token_id]
 
-            # 두 token을 합 해서 merge_token 생성
-            merge_token = left_token + right_token
+            # pair 튜플 자체가 vocab token으로 등록되어 있는지 확인 
+            if pair in self.token_to_id:
+                # 현재 merge pair에 해당하는 새 token ID를 찾음 
+                merge_token_id = self.token_to_id[pair]
 
-            # merge_token의 token_id 조회 
-            merge_token_id = self.token_to_id[merge_token]
+            # pair가 bytes로 변환되어 있다면  
+            else:
+                # 두 token을 합 해서 merge_token 생성
+                merge_token = left_token + right_token
 
+                # merge_token의 token_id 조회 
+                merge_token_id = self.token_to_id[merge_token]
+        
             i = 0
 
             while(i < len(sequence)):
@@ -354,7 +427,7 @@ class BPETokenizer:
                 # token이 best_pair 순서대로 연결되어 있지 않다면
                 else:
                     new_sequence.append(sequence[i])
-            
+                
                     i += 1
 
             # 순회가 끝나면 현재 시퀀스를 새로운 시퀀스로 치환 
@@ -363,7 +436,7 @@ class BPETokenizer:
 
         # add_bos_eos가 True면 sequence의 앞에 BOS, 뒤에 EOS 토큰 추가 
         if add_bos_eos:
-            # FIXME: get 함수 쓸까
+            # FIXME: getter 함수로 리팩토링 하기 
             # 리스트에 정수를 더하려면 반드시 [] 대괄호로 묶어줘야 함 
             sequence = [SPECIAL_IDS[BOS_TOKEN]] + sequence + [SPECIAL_IDS[EOS_TOKEN]]
         
@@ -373,7 +446,7 @@ class BPETokenizer:
 
     def decode(self, ids: list[int], skip_special: bool = True) -> str:
         """
-        TODO: token ID 리스트를 문자열로 복원합니다.
+        token ID 리스트를 문자열로 복원합니다.
 
         주의:
         - merge token은 원본 byte token까지 재귀적으로 펼칩니다.
@@ -394,8 +467,19 @@ class BPETokenizer:
                 if isinstance(token, str):
                     # 건너뛰기
                     continue
+                
                 elif isinstance(token, bytes):
                     result_byte.extend(token)
+                
+                # train에서 bytes로 저장했지만, TC에서 tuple 형태로 전달해서 대응을 위해 처리 
+                elif isinstance(token, tuple):
+                    # token_id를 실제 bytes로 변환 
+                    # 재귀적으로 decode 
+                    nested_text = self.decode(list(token), skip_special = skip_special)
+
+                    # 재귀 결과 문자열을 encode해서 현재 result_byte에 붙인다
+                    result_byte.extend(nested_text.encode("utf-8"))
+
             # skip_special false일 때 
             else:
                 # token이 str이면
@@ -407,6 +491,16 @@ class BPETokenizer:
                 # token이 bytes면
                 elif isinstance(token, bytes):
                     result_byte.extend(token)
+
+                # train에서 bytes로 저장했지만, TC에서 tuple 형태로 전달해서 대응을 위해 처리 
+                elif isinstance(token, tuple):
+                    # token_id를 실제 bytes로 변환 
+                    # 재귀적으로 decode 
+                    nested_text = self.decode(list(token), skip_special = skip_special)
+
+                    # 재귀 결과 문자열을 encode해서 현재 result_byte에 붙인다
+                    result_byte.extend(nested_text.encode("utf-8"))
+
 
         # 순회 다 하고 마지막에 decode("utf-8") 호출
         # bytes(result_byte).decode("utf-8") => 불변 bytes 객체로 바꿔서 문자열 디코딩
