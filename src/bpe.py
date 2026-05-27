@@ -126,15 +126,86 @@ class BPETokenizer:
             # token id append 해 주기 
             sequence.append(token_id)
 
+        # -- merge -- 
+        # 짝지어진 token pair와 그 횟수를 저장할 딕셔너리 
+        pair_dict = {}
+        
         # 가장 자주 등장하는 이웃 token pair 찾기
-        # -> 어디서? 순회를 해야겟지 vocab_size에 도달할 때까지 반복
+        # 현재 시퀀스 안에서 이웃을 찾는 거기 때문에 vocab_size가 아니라 len(sequence) - 1 까지 순회 
+        # len(sequence)까지 순회하면 curr이 마지막 token_id일 때 index + 1 때문에 IndexError 발생 
+        for index in range(0, len(sequence) - 1):
+            curr_token_id = sequence[index]
+            next_token_id = sequence[index + 1]
 
-        # 새 token ID를 만들고, 시퀀스의 해당 pair를 새 ID로 치환하기
-        # 시퀀스가 뭐지 토큰 id를 어떻게 만들지
- 
-        # `self.merges`, `self.id_to_token`, `self.token_to_id`를 갱신
-        # 어떤 값을 저기에 넣어야 하는거지 
+            # pair 딕셔너리에 key로 사용할 token pair를 저장하는 튜플 
+            pair = (curr_token_id, next_token_id)
 
+            # pair를 key로, 등장 횟수를 value로 저장 
+            # pair_dict.get(pair, 0) + 1
+            # -> pair_dict에 pair가 없으면 0으로 시작 
+            # -> pair_dict에 pair가 있으면 기존 횟수 + 1
+            pair_dict[pair] = pair_dict.get(pair, 0) + 1
+
+        # pair_dict에서 pair_dict.get값 중 가장 큰 get 값을 가진 pair를 찾음 
+        best_pair = max(pair_dict, key = pair_dict.get)
+
+        # best_pair의 두 token을 하나의 token으로 합쳐 새로운 token의 token ID 생성
+        # 아래 tuple unpacking을 사용하는 게 더 좋은 코드 => 변수 이름을 통해 로직을 직관적으로 알 수 있음 
+        # left_token = self.id_to_token[best_pair[0]]
+        # right_token = self.id_to_token[best_pair[1]]
+
+        # tuple unpacking 사용 
+        left_token_id, right_token_id = best_pair
+
+        # pair의 두 token_id로 token을 얻음
+        left_token = self.id_to_token[left_token_id]
+        right_token = self.id_to_token[right_token_id]
+
+        # 두 token을 합 해서 새로운 token을 생성
+        new_token = left_token + right_token
+
+        # 새로운 token의 token_id 생성 
+        # 새로운 token_id 생성 = vocab에서 아직 쓰이지 않은 다음 번호를 부여 -> 260 이후 번호 
+        # vocab = id_to_token, token_to_id
+        # len(self.id_to_token): 0부터 현재 등록된 id까지의 개수 => 아직 쓰이지 않은 첫 번호의 수를 반환
+        new_token_id = len(self.id_to_token)
+
+        # 나중에 현재 sequence로 한 번에 치환할 새로운 리스트 
+        new_sequence = []
+
+        # 현재 sequence의 best_pair를 모두 새 token_id로 치환 
+        # 원본 sequence 자체를 수정하기보다, 새 리스트를 만들어 저장 후 한꺼번에 치환하는 게 안전
+        i = 0
+
+        while(i < len(sequence) - 1):
+            curr_token_id = sequence[i]
+            next_token_id = sequence[i + 1]
+
+            # 현재 token이 beat_pair 순서대로 연결되어 있다면  
+            if curr_token_id == left_token_id and next_token_id == right_token_id:
+                # 새로운 시퀀스에 new_token_id를 넣어줌 
+                new_sequence.append(new_token_id)
+
+                # 현재 인덱스와 다음 인덱스를 확인 후 저장했으니 인덱스를 2씩 증가해서 확인하지 않은 인덱스로 이동 
+                i += 2
+            # token이 best_pair 순서대로 연결되어 있지 않다면
+            else:
+                # 현재 시퀀스 token_id 그대로 새로운 시퀀스에 넣어줌 
+                new_sequence.append(sequence[i])
+            
+                # 현재 인덱스를 확인 후 저장했으니 인덱스를 1씩 증가해서 확인하지 않은 인덱스로 이동 
+                i += 1
+            
+        # 순회가 끝나면 현재 시퀀스를 새로운 시퀀스로 치환 
+        sequence = new_sequence
+
+        # TODO: 새로 만든 token을 vocab에 등록
+        # vocab = id_to_token, token_to_id
+        # => `self.merges`, `self.id_to_token`, `self.token_to_id`를 갱신
+        self.id_to_token[new_token_id] = new_token
+        self.token_to_id[new_token] = new_token_id
+        self.merges.append(best_pair)
+    
         # raise NotImplementedError("BPETokenizer.train을 구현하세요.")
 
     def save(self, path: str | Path):
