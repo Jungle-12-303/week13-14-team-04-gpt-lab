@@ -90,8 +90,49 @@ class BPETokenizer:
         - 가장 자주 등장하는 이웃 token pair를 찾습니다.
         - 새 token ID를 만들고, 시퀀스의 해당 pair를 새 ID로 치환합니다.
         - `self.merges`, `self.id_to_token`, `self.token_to_id`를 갱신합니다.
+
+        train = tokenizer 학습 단계
+        corpus를 보고 붙어 다니는 byte 쌍을 찾아서, 그 쌍을 새 token으로 등록
+        -> corpus: 모델의 훈련을 위해 기본적으로 사용하는 대규모 텍스트 데이터셋 
+        => corpus = 원시 텍스트(raw text), 데이터에 특정한 정답(레이블) 정보가 따로 지정되어 있지 않은 일반적인 텍스트 모음
+
+        self.merges = encode가 나중에 같은 규칙으로 병합할 수 있도록 어떤 쌍을 어떤 순서로 합쳤는지 저장하는 목록 
+
+        시퀀스: 현재 corpus를 표현하는 token ID 리스트
         """
-        raise NotImplementedError("BPETokenizer.train을 구현하세요.")
+        # token id를 저장할 sequence 라는 빈 리스트 만들기
+        sequence = []
+
+        # byte ID 시퀀스 생성 -> corpus를 utf-8 bytes로 바꿈
+        # -> 글자 단위가 아니라 byte 단위로 자르기 위함 = 바이트 페어 인코딩 
+        # -> 원본 corpus를 바꾸는 함수가 아니라 새로운 bytes 객체를 반환  
+        # 인코딩 된 bytes라 정수 값으로 반환됨 
+        corpus_bytes = corpus.encode("utf-8")
+        
+        # init에서 만들어둔 기본 byte token ID를 찾아옴 
+        for byte_value in corpus_bytes: 
+            # 인코딩 된 정수 값 bytes를 다시 1-byte짜리 bytes 객체로 감싸서 token_to_id가 조회할 수 있게 해줘야 함
+            # bytes([byte_value]) -> byte_value값 하나로 이루어진 bytes 객체를 만듦 
+            # => 정수 하나를 byte 값 하나짜리 리스트로 만들고 그 리스트를 bytes 객체로 변환 
+            # => 원래 bytes 객체 안에 있던 byte 하나의 형태로 돌아오는 것
+            token_bytes = bytes([byte_value])
+
+            # 원래 형태로 돌아온 byte로 token id 찾기 
+            token_id = self.token_to_id[token_bytes]
+
+            # token id append 해 주기 
+            sequence.append(token_id)
+
+        # 가장 자주 등장하는 이웃 token pair 찾기
+        # -> 어디서? 순회를 해야겟지 vocab_size에 도달할 때까지 반복
+
+        # 새 token ID를 만들고, 시퀀스의 해당 pair를 새 ID로 치환하기
+        # 시퀀스가 뭐지 토큰 id를 어떻게 만들지
+ 
+        # `self.merges`, `self.id_to_token`, `self.token_to_id`를 갱신
+        # 어떤 값을 저기에 넣어야 하는거지 
+
+        # raise NotImplementedError("BPETokenizer.train을 구현하세요.")
 
     def save(self, path: str | Path):
         """
@@ -99,6 +140,7 @@ class BPETokenizer:
 
         bytes와 tuple은 JSON에 바로 저장할 수 없으므로 type 정보를 함께 저장하세요.
         """
+        
         raise NotImplementedError("BPETokenizer.save를 구현하세요.")
 
     def load(self, path: str | Path):
