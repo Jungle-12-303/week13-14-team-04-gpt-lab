@@ -95,6 +95,7 @@ class TestBPETokenizer:
             assert ids[0] == SPECIAL_IDS[BOS_TOKEN]
             assert ids[-1] == SPECIAL_IDS[EOS_TOKEN]
             text = tok.decode(ids, skip_special=True)
+            breakpoint()
             assert text == sample
         except NotImplementedError:
             pytest.fail("encode/decode 미구현")
