@@ -8,7 +8,7 @@ UTF-8 byte-level BPE 토크나이저 과제 템플릿.
 """
 
 from pathlib import Path
-
+import json
 
 PAD_TOKEN = "<pad>"
 UNK_TOKEN = "<unk>"
@@ -223,9 +223,57 @@ class BPETokenizer:
         TODO: vocabulary와 merge rule을 JSON 파일로 저장합니다.
 
         bytes와 tuple은 JSON에 바로 저장할 수 없으므로 type 정보를 함께 저장하세요.
+        -> bytes는 정수 리스트로 바꿔서 저장 => list[int]
+        -> id_to_token은 key가 int, JSON은 key str => 저장할 때 id를 str로 형 변환 or 리스트 형태로 저장
+        -> merges는 tuple -> JSON은 tuple이 없기 때문에 리스트로 저장 
+
+        저장해야 할 핵심 상태
+        id_to_token
+        token_to_id -> 이건 사실 id_to_token만 있으면 다시 만들 수 있음 
+        -> vocab_size를 저장하자 
+        merges
         """
+        # save 함수에서 Path를 지원하도록 변환
+        path = Path(path)
+
+        # 저장할 dict 생성
+        data = {}
+
+        # vocab_size 넣기 
+        _vocab_size = self.vocab_size
         
-        raise NotImplementedError("BPETokenizer.save를 구현하세요.")
+        data["vocab_size"] = _vocab_size
+
+        # token 정보를 임시 저장할 딕셔너리 
+        token_dict = {}
+
+        # id_to_token을 JSON에 넣을 리스트로 변환해서 넣음
+        for item in self.id_to_token.items():
+            # int형 id를 str로 형 변환 
+            token_dict["_id"] = str(item[0])
+
+            # token이 str일 때
+            if isinstance(item[1], str):
+                token_dict["_type"] = "str"
+                token_dict["_value"] = item[1]
+
+            # token이 bytes일 때 
+            elif isinstance(item[1], bytes):
+                token_dict["_type"]  = "bytes"
+                token_dict["_value"] = list(item[1])
+
+            data["token"] = token_dict
+
+        # merges를 JSON에 넣을 리스트로 변환해서 넣음
+        _merges_list = [(left, right) for left, right in self.merges]
+
+        data["merges"] = _merges_list
+        
+        # path를 열고 json.dump로 저장 
+        with open(path, "w") as f:
+            json.dump(data, f)
+            
+        # raise NotImplementedError("BPETokenizer.save를 구현하세요.")
 
     def load(self, path: str | Path):
         """
