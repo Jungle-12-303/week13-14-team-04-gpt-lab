@@ -304,6 +304,7 @@ class BPETokenizer:
 
         # add_bos_eos가 True면 sequence의 앞에 BOS, 뒤에 EOS 토큰 추가 
         if add_bos_eos:
+            # FIXME: get 함수 쓸까
             # 리스트에 정수를 더하려면 반드시 [] 대괄호로 묶어줘야 함 
             sequence = [SPECIAL_IDS[BOS_TOKEN]] + sequence + [SPECIAL_IDS[EOS_TOKEN]]
         
@@ -319,6 +320,41 @@ class BPETokenizer:
         - merge token은 원본 byte token까지 재귀적으로 펼칩니다.
         - byte를 하나씩 decode하지 말고, 마지막에 `bytes(...).decode("utf-8")`를 한 번만 호출합니다.
         """
-        
+        # 리스트로 만들면 마지막에 decode 메소드 사용 불가
+        # -> 처음부터 bytearray 객체로 만들기 
+        result_byte = bytearray()
 
-        raise NotImplementedError("BPETokenizer.decode를 구현하세요.")
+        # 토큰 아이디를 받아서 각 아이디가 가리키는 바이트를 이어 붙이고 마지막에 utf-8 문자열로 복원
+        for token_id in ids:
+            # 각 id를 통해 id_to_token에서 token 조회
+            token = self.id_to_token[token_id]
+            
+            # skip_special true일 때 
+            if skip_special:
+                # token이 str이면
+                if isinstance(token, str):
+                    # 건너뛰기
+                    continue
+                elif isinstance(token, bytes):
+                    result_byte.extend(token)
+            # skip_special false일 때 
+            else:
+                # token이 str이면
+                if isinstance(token, str):
+                    # token을 utf-8로 encode해서 붙임
+                    token_bytes = token.encode("utf-8")
+                    result_byte.extend(token_bytes)
+
+                # token이 bytes면
+                elif isinstance(token, bytes):
+                    result_byte.extend(token)
+
+        # 순회 다 하고 마지막에 decode("utf-8") 호출
+        # bytes(result_byte).decode("utf-8") => 불변 bytes 객체로 바꿔서 문자열 디코딩
+        # bytes: 수정 불가능, 최종 결과 표현에 좋음 
+        # bytearray: 수정 가능, 누적하기에 좋음  
+        # -> bytearray도 decode 사용 가능하지만 보통 최종 byte 시퀀스를 만든 뒤 bytes로 확정하고 decode한다는 의미로 이렇게 사용 
+        result = bytes(result_byte).decode("utf-8")
+
+        return result
+        # raise NotImplementedError("BPETokenizer.decode를 구현하세요.")
