@@ -44,7 +44,6 @@ class BPETokenizer:
 
     def _init_special_tokens(self):
         """
-        TODO:
         1. 특수 토큰 4개를 고정 ID 0~3에 등록합니다.
         2. byte 0~255를 ID 4~259에 bytes([byte_value]) 형태로 등록합니다.
         """
@@ -83,7 +82,7 @@ class BPETokenizer:
 
     def train(self, corpus: str):
         """
-        TODO: 코퍼스에서 BPE merge rule과 vocabulary를 학습합니다.
+        코퍼스에서 BPE merge rule과 vocabulary를 학습합니다.
 
         구현 힌트:
         - `corpus.encode("utf-8")`로 byte ID 시퀀스를 만듭니다.
@@ -127,85 +126,96 @@ class BPETokenizer:
             sequence.append(token_id)
 
         # -- merge -- 
-        # 짝지어진 token pair와 그 횟수를 저장할 딕셔너리 
-        pair_dict = {}
+        while(len(self.id_to_token) < self.vocab_size):
+            # --- FIXME: 헬퍼 함수로 리팩토링 하기 ---
+            # 짝지어진 token pair와 그 횟수를 저장할 딕셔너리 
+            pair_dict = {}
+            
+            # 가장 자주 등장하는 이웃 token pair 찾기
+            # 현재 시퀀스 안에서 이웃을 찾는 거기 때문에 vocab_size가 아니라 len(sequence) - 1 까지 순회 
+            # len(sequence)까지 순회하면 curr이 마지막 token_id일 때 index + 1 때문에 IndexError 발생 
+            for index in range(0, len(sequence) - 1):
+                curr_token_id = sequence[index]
+                next_token_id = sequence[index + 1]
+
+                # pair 딕셔너리에 key로 사용할 token pair를 저장하는 튜플 
+                pair = (curr_token_id, next_token_id)
+
+                # pair를 key로, 등장 횟수를 value로 저장 
+                # pair_dict.get(pair, 0) + 1
+                # -> pair_dict에 pair가 없으면 0으로 시작 
+                # -> pair_dict에 pair가 있으면 기존 횟수 + 1
+                pair_dict[pair] = pair_dict.get(pair, 0) + 1
+
+            # max 연산에서 터지지 않기 위한 조건 
+            if len(pair_dict) == 0:
+                break
+
+            # pair_dict에서 pair_dict.get값 중 가장 큰 get 값을 가진 pair를 찾음 
+            best_pair = max(pair_dict, key = pair_dict.get)
+
+            # best_pair의 두 token을 하나의 token으로 합쳐 새로운 token의 token ID 생성
+            # 아래 tuple unpacking을 사용하는 게 더 좋은 코드 => 변수 이름을 통해 로직을 직관적으로 알 수 있음 
+            # left_token = self.id_to_token[best_pair[0]]
+            # right_token = self.id_to_token[best_pair[1]]
+
+            # tuple unpacking 사용 
+            left_token_id, right_token_id = best_pair
+
+            # pair의 두 token_id로 token을 얻음
+            left_token = self.id_to_token[left_token_id]
+            right_token = self.id_to_token[right_token_id]
+
+            # 두 token을 합 해서 새로운 token을 생성
+            new_token = left_token + right_token
+
+            # 새로운 token의 token_id 생성 
+            # 새로운 token_id 생성 = vocab에서 아직 쓰이지 않은 다음 번호를 부여 -> 260 이후 번호 
+            # vocab = id_to_token, token_to_id
+            # len(self.id_to_token): 0부터 현재 등록된 id까지의 개수 => 아직 쓰이지 않은 첫 번호의 수를 반환
+            new_token_id = len(self.id_to_token)
+
+            # 나중에 현재 sequence로 한 번에 치환할 새로운 리스트 
+            new_sequence = []
+
+            # 현재 sequence의 best_pair를 모두 새 token_id로 치환 
+            # 원본 sequence 자체를 수정하기보다, 새 리스트를 만들어 저장 후 한꺼번에 치환하는 게 안전
+            i = 0
+
+            while(i < len(sequence)):
+                if (i + 1) >= len(sequence):
+                    new_sequence.append(sequence[i])
+                    break
+                
+                curr_token_id = sequence[i]
+                next_token_id = sequence[i + 1]
+
+                # 현재 token이 beat_pair 순서대로 연결되어 있다면  
+                if curr_token_id == left_token_id and next_token_id == right_token_id:
+                    # 새로운 시퀀스에 new_token_id를 넣어줌 
+                    new_sequence.append(new_token_id)
+
+                    # 현재 인덱스와 다음 인덱스를 확인 후 저장했으니 인덱스를 2씩 증가해서 확인하지 않은 인덱스로 이동 
+                    i += 2
+                # token이 best_pair 순서대로 연결되어 있지 않다면
+                else:
+                    # 현재 시퀀스 token_id 그대로 새로운 시퀀스에 넣어줌 
+                    new_sequence.append(sequence[i])
+                
+                    # 현재 인덱스를 확인 후 저장했으니 인덱스를 1씩 증가해서 확인하지 않은 인덱스로 이동 
+                    i += 1
+                
+            # 순회가 끝나면 현재 시퀀스를 새로운 시퀀스로 치환 
+            sequence = new_sequence
+            # --- FIXME: 헬퍼 함수로 리팩토링 하기 ---
+
+            # 새로 만든 token을 vocab에 등록
+            # vocab = id_to_token, token_to_id
+            # => `self.merges`, `self.id_to_token`, `self.token_to_id`를 갱신
+            self.id_to_token[new_token_id] = new_token
+            self.token_to_id[new_token] = new_token_id
+            self.merges.append(best_pair)
         
-        # 가장 자주 등장하는 이웃 token pair 찾기
-        # 현재 시퀀스 안에서 이웃을 찾는 거기 때문에 vocab_size가 아니라 len(sequence) - 1 까지 순회 
-        # len(sequence)까지 순회하면 curr이 마지막 token_id일 때 index + 1 때문에 IndexError 발생 
-        for index in range(0, len(sequence) - 1):
-            curr_token_id = sequence[index]
-            next_token_id = sequence[index + 1]
-
-            # pair 딕셔너리에 key로 사용할 token pair를 저장하는 튜플 
-            pair = (curr_token_id, next_token_id)
-
-            # pair를 key로, 등장 횟수를 value로 저장 
-            # pair_dict.get(pair, 0) + 1
-            # -> pair_dict에 pair가 없으면 0으로 시작 
-            # -> pair_dict에 pair가 있으면 기존 횟수 + 1
-            pair_dict[pair] = pair_dict.get(pair, 0) + 1
-
-        # pair_dict에서 pair_dict.get값 중 가장 큰 get 값을 가진 pair를 찾음 
-        best_pair = max(pair_dict, key = pair_dict.get)
-
-        # best_pair의 두 token을 하나의 token으로 합쳐 새로운 token의 token ID 생성
-        # 아래 tuple unpacking을 사용하는 게 더 좋은 코드 => 변수 이름을 통해 로직을 직관적으로 알 수 있음 
-        # left_token = self.id_to_token[best_pair[0]]
-        # right_token = self.id_to_token[best_pair[1]]
-
-        # tuple unpacking 사용 
-        left_token_id, right_token_id = best_pair
-
-        # pair의 두 token_id로 token을 얻음
-        left_token = self.id_to_token[left_token_id]
-        right_token = self.id_to_token[right_token_id]
-
-        # 두 token을 합 해서 새로운 token을 생성
-        new_token = left_token + right_token
-
-        # 새로운 token의 token_id 생성 
-        # 새로운 token_id 생성 = vocab에서 아직 쓰이지 않은 다음 번호를 부여 -> 260 이후 번호 
-        # vocab = id_to_token, token_to_id
-        # len(self.id_to_token): 0부터 현재 등록된 id까지의 개수 => 아직 쓰이지 않은 첫 번호의 수를 반환
-        new_token_id = len(self.id_to_token)
-
-        # 나중에 현재 sequence로 한 번에 치환할 새로운 리스트 
-        new_sequence = []
-
-        # 현재 sequence의 best_pair를 모두 새 token_id로 치환 
-        # 원본 sequence 자체를 수정하기보다, 새 리스트를 만들어 저장 후 한꺼번에 치환하는 게 안전
-        i = 0
-
-        while(i < len(sequence) - 1):
-            curr_token_id = sequence[i]
-            next_token_id = sequence[i + 1]
-
-            # 현재 token이 beat_pair 순서대로 연결되어 있다면  
-            if curr_token_id == left_token_id and next_token_id == right_token_id:
-                # 새로운 시퀀스에 new_token_id를 넣어줌 
-                new_sequence.append(new_token_id)
-
-                # 현재 인덱스와 다음 인덱스를 확인 후 저장했으니 인덱스를 2씩 증가해서 확인하지 않은 인덱스로 이동 
-                i += 2
-            # token이 best_pair 순서대로 연결되어 있지 않다면
-            else:
-                # 현재 시퀀스 token_id 그대로 새로운 시퀀스에 넣어줌 
-                new_sequence.append(sequence[i])
-            
-                # 현재 인덱스를 확인 후 저장했으니 인덱스를 1씩 증가해서 확인하지 않은 인덱스로 이동 
-                i += 1
-            
-        # 순회가 끝나면 현재 시퀀스를 새로운 시퀀스로 치환 
-        sequence = new_sequence
-
-        # TODO: 새로 만든 token을 vocab에 등록
-        # vocab = id_to_token, token_to_id
-        # => `self.merges`, `self.id_to_token`, `self.token_to_id`를 갱신
-        self.id_to_token[new_token_id] = new_token
-        self.token_to_id[new_token] = new_token_id
-        self.merges.append(best_pair)
-    
         # raise NotImplementedError("BPETokenizer.train을 구현하세요.")
 
     def save(self, path: str | Path):
@@ -232,7 +242,74 @@ class BPETokenizer:
         - train/load에서 얻은 merge rule을 학습 순서대로 적용합니다.
         - add_bos_eos=True이면 앞뒤에 bos/eos ID를 붙입니다.
         """
-        raise NotImplementedError("BPETokenizer.encode를 구현하세요.")
+        # token id를 저장할 sequence 라는 빈 리스트 만들기
+        sequence = []
+        
+        text_bytes = text.encode("utf-8")
+        
+        # init에서 만들어둔 기본 byte token ID를 찾아옴 
+        for byte_value in text_bytes: 
+            token_bytes = bytes([byte_value])
+
+            # 원래 형태로 돌아온 byte로 token id 찾기 
+            token_id = self.token_to_id[token_bytes]
+
+            # token id append 해 주기 
+            sequence.append(token_id)
+
+        # -- pair를 sequence에 적용 -- 
+        # train에서 merges에 저장한 pair를 사용 
+        for pair in self.merges:
+            # --- FIXME: 헬퍼 함수로 리팩토링 하기 ---
+            # 나중에 현재 sequence로 한 번에 치환할 새로운 리스트 
+            new_sequence = []
+            
+            # tuple unpacking 사용 
+            left_token_id, right_token_id = pair
+        
+            # pair의 두 token_id로 token을 얻음
+            left_token = self.id_to_token[left_token_id]
+            right_token = self.id_to_token[right_token_id]
+
+            # 두 token을 합 해서 merge_token 생성
+            merge_token = left_token + right_token
+
+            # merge_token의 token_id 조회 
+            merge_token_id = self.token_to_id[merge_token]
+
+            i = 0
+
+            while(i < len(sequence)):
+                if (i + 1) >= len(sequence):
+                    new_sequence.append(sequence[i])
+                    break
+
+                curr_token_id = sequence[i]
+                next_token_id = sequence[i + 1]
+
+                # 현재 token이 beat_pair 순서대로 연결되어 있다면  
+                if curr_token_id == left_token_id and next_token_id == right_token_id:
+                    new_sequence.append(merge_token_id)
+
+                    i += 2
+                # token이 best_pair 순서대로 연결되어 있지 않다면
+                else:
+                    new_sequence.append(sequence[i])
+            
+                    i += 1
+
+            # 순회가 끝나면 현재 시퀀스를 새로운 시퀀스로 치환 
+            sequence = new_sequence
+            # --- FIXME: 헬퍼 함수로 리팩토링 하기 ---
+
+        # add_bos_eos가 True면 sequence의 앞에 BOS, 뒤에 EOS 토큰 추가 
+        if add_bos_eos:
+            # 리스트에 정수를 더하려면 반드시 [] 대괄호로 묶어줘야 함 
+            sequence = [SPECIAL_IDS[BOS_TOKEN]] + sequence + [SPECIAL_IDS[EOS_TOKEN]]
+        
+        return sequence
+    
+        # raise NotImplementedError("BPETokenizer.encode를 구현하세요.")
 
     def decode(self, ids: list[int], skip_special: bool = True) -> str:
         """
@@ -242,4 +319,6 @@ class BPETokenizer:
         - merge token은 원본 byte token까지 재귀적으로 펼칩니다.
         - byte를 하나씩 decode하지 말고, 마지막에 `bytes(...).decode("utf-8")`를 한 번만 호출합니다.
         """
+        
+
         raise NotImplementedError("BPETokenizer.decode를 구현하세요.")
