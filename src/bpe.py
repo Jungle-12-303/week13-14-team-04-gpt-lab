@@ -244,33 +244,43 @@ class BPETokenizer:
         
         data["vocab_size"] = _vocab_size
 
-        # token 정보를 임시 저장할 딕셔너리 
-        token_dict = {}
+        # token 정보를 임시 저장한 딕셔너리를 임시 저장할 list 
+        token_list = []
 
         # id_to_token을 JSON에 넣을 리스트로 변환해서 넣음
         for item in self.id_to_token.items():
+            # token 정보를 임시 저장할 딕셔너리 
+            token_dict = {}
+
             # int형 id를 str로 형 변환 
-            token_dict["_id"] = str(item[0])
+            token_dict["id"] = str(item[0])
 
             # token이 str일 때
             if isinstance(item[1], str):
-                token_dict["_type"] = "str"
-                token_dict["_value"] = item[1]
+                token_dict["type"] = "str"
+                token_dict["value"] = item[1]
 
             # token이 bytes일 때 
             elif isinstance(item[1], bytes):
-                token_dict["_type"]  = "bytes"
-                token_dict["_value"] = list(item[1])
+                token_dict["type"]  = "bytes"
+                token_dict["value"] = list(item[1])
 
-            data["token"] = token_dict
+            # token이 tuple일 때 
+            elif isinstance(item[1], tuple):
+                token_dict["type"]  = "tuple"
+                token_dict["value"] = list(item[1])
+
+            token_list.append(token_dict)
+
+        data["id_to_token"] = token_list
 
         # merges를 JSON에 넣을 리스트로 변환해서 넣음
-        _merges_list = [(left, right) for left, right in self.merges]
+        _merges_list = [[left, right] for left, right in self.merges]
 
         data["merges"] = _merges_list
         
         # path를 열고 json.dump로 저장 
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f)
             
         # raise NotImplementedError("BPETokenizer.save를 구현하세요.")
@@ -279,6 +289,7 @@ class BPETokenizer:
         """
         TODO: save()로 저장한 JSON 파일을 읽어 vocabulary와 merge rule을 복원합니다.
         """
+
         raise NotImplementedError("BPETokenizer.load를 구현하세요.")
 
     def encode(self, text: str, add_bos_eos: bool = False) -> list[int]:
