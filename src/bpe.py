@@ -100,6 +100,9 @@ class BPETokenizer:
 
         시퀀스: 현재 corpus를 표현하는 token ID 리스트
         """
+        # 기본 token 등록을 위해 _init_special_tokens() 호출 
+        self._init_special_tokens()
+
         # token id를 저장할 sequence 라는 빈 리스트 만들기
         sequence = []
 
