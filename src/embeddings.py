@@ -10,9 +10,9 @@ class InputEmbedding(nn.Module):
     token ID를 Transformer 입력 벡터로 바꿉니다.
 
     구현할 구조:
-    - token embedding: nn.Embedding(vocab_size, emb_dim)
-    - position embedding: nn.Embedding(context_length, emb_dim)
-    - token embedding + position embedding
+    - token embedding: nn.Embedding(vocab_size, emb_dim) -> token embedding 생성: 토큰 id를 벡터로 바꾸는 레이어
+    - position embedding: nn.Embedding(context_length, emb_dim) -> position embedding 생성: 위치 번호를 벡터로 바꾸는 레이어 
+    - token embedding + position embedding -> 두 값을 더한 뒤 nn.Dropout 적용
     - dropout
     """
 
