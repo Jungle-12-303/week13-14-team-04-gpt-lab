@@ -62,13 +62,39 @@ class GPTDataset(Dataset):
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        TODO: idx번째 input_ids와 target_ids를 LongTensor로 반환합니다.
+        idx번째 input_ids와 target_ids를 LongTensor로 반환합니다.
 
         Returns:
             input_ids: (context_length,)
             target_ids: (context_length,)
         """
-        raise NotImplementedError("GPTDataset.__getitem__을 구현하세요.")
+        # idx번째 학습 샘플을 구하기 위한 start 인덱스 계산 
+        start = idx * self.stride
+    
+        # input을 저장할 리스트
+        input = []
+        
+        # target을 저장할 리스트
+        target = []
+        
+        # start 인덱스부터 시작, context_length 까지 반복
+        for i in range(start, start + self.context_length):
+            # 현재 인덱스에서 샘플 만들 수 있는지 검사
+            if start + self.context_length < len(self.token_ids):
+                # start 인덱스부터 context_length까지 있는 요소들을 하나씩 리스트에 넣어줌 
+                input.append(self.token_ids[i])
+                target.append(self.token_ids[i + 1])
+            else:
+                break
+        
+        # 리스트를 LongTensor로 변환
+        input_ids = torch.tensor(input, dtype=torch.long)
+        target_ids = torch.tensor(target, dtype=torch.long)
+
+        # 두 LongTensor를 tuple로 묶어서 반환 
+        return tuple((input_ids, target_ids))
+    
+        # raise NotImplementedError("GPTDataset.__getitem__을 구현하세요.")
 
 
 def create_dataloader(
