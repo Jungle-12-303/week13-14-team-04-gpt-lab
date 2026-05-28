@@ -23,8 +23,36 @@ class GPTDataset(Dataset):
         self.token_ids = token_ids
         self.context_length = context_length
         self.stride = stride if stride is not None else context_length
-        # TODO: 만들 수 있는 학습 샘플 개수를 self._length에 저장하세요.
-        raise NotImplementedError("GPTDataset.__init__에서 self._length를 구현하세요.")
+
+        # 만들 수 있는 학습 샘플 개수를 self._length에 저장하세요.
+        # 학습 샘플 = 현재 토큰 구간을 input으로, 한 칸 뒤로 민 같은 길이 구간을 target으로 쓰는 한 쌍 
+        # input, target 길이 = context_length 
+
+        # 첫 start 인덱스 
+        start = 0
+        
+        # 학습 샘플 개수 = input, target 쌍 수
+        # 학습 샘플 1개 = input, target 한 쌍 
+        samples = 0
+
+        # for문으로 범위를 계속 돌면 나중에 start가 리스트 길이를 넘어가도 계속 검사
+        # sample 생성 가능할 때까지만 반복하도록 하기
+        #for i in range(0, len(token_ids)):
+        while(len(self.token_ids) != 0):
+            # start + self.context_length에서 target을 만들 수 있으면 input도 만들 수 있다
+            # target은 start + 1에서 시작해서 context_length개 -> 마지막 인덱스는 길이 - 1 값!
+            if start + self.context_length < len(token_ids):
+                # sample 생성 가능
+                samples += 1
+
+                # 이후 start 인덱스 
+                start += self.stride
+            else:
+                break
+
+        self._length = samples
+
+        # raise NotImplementedError("GPTDataset.__init__에서 self._length를 구현하세요.")
 
     def __len__(self) -> int:
         """TODO: 전체 샘플 개수를 반환합니다."""
