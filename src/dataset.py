@@ -55,8 +55,10 @@ class GPTDataset(Dataset):
         # raise NotImplementedError("GPTDataset.__init__에서 self._length를 구현하세요.")
 
     def __len__(self) -> int:
-        """TODO: 전체 샘플 개수를 반환합니다."""
-        raise NotImplementedError("GPTDataset.__len__을 구현하세요.")
+        """전체 샘플 개수를 반환합니다."""
+
+        return self._length
+        # raise NotImplementedError("GPTDataset.__len__을 구현하세요.")
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
