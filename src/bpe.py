@@ -471,14 +471,14 @@ class BPETokenizer:
                 elif isinstance(token, bytes):
                     result_byte.extend(token)
                 
-                # train에서 bytes로 저장했지만, TC에서 tuple 형태로 전달해서 대응을 위해 처리 
-                elif isinstance(token, tuple):
-                    # token_id를 실제 bytes로 변환 
-                    # 재귀적으로 decode 
-                    nested_text = self.decode(list(token), skip_special = skip_special)
+                # # train에서 bytes로 저장했지만, TC에서 tuple 형태로 전달해서 대응을 위해 처리 
+                # elif isinstance(token, tuple):
+                #     # token_id를 실제 bytes로 변환 
+                #     # 재귀적으로 decode 
+                #     nested_text = self.decode(list(token), skip_special = skip_special)
 
-                    # 재귀 결과 문자열을 encode해서 현재 result_byte에 붙인다
-                    result_byte.extend(nested_text.encode("utf-8"))
+                #     # 재귀 결과 문자열을 encode해서 현재 result_byte에 붙인다
+                #     result_byte.extend(nested_text.encode("utf-8"))
 
             # skip_special false일 때 
             else:
@@ -492,14 +492,14 @@ class BPETokenizer:
                 elif isinstance(token, bytes):
                     result_byte.extend(token)
 
-                # train에서 bytes로 저장했지만, TC에서 tuple 형태로 전달해서 대응을 위해 처리 
-                elif isinstance(token, tuple):
-                    # token_id를 실제 bytes로 변환 
-                    # 재귀적으로 decode 
-                    nested_text = self.decode(list(token), skip_special = skip_special)
+                # # train에서 bytes로 저장했지만, TC에서 tuple 형태로 전달해서 대응을 위해 처리 
+                # elif isinstance(token, tuple):
+                #     # token_id를 실제 bytes로 변환 
+                #     # 재귀적으로 decode 
+                #     nested_text = self.decode(list(token), skip_special = skip_special)
 
-                    # 재귀 결과 문자열을 encode해서 현재 result_byte에 붙인다
-                    result_byte.extend(nested_text.encode("utf-8"))
+                #     # 재귀 결과 문자열을 encode해서 현재 result_byte에 붙인다
+                #     result_byte.extend(nested_text.encode("utf-8"))
 
 
         # 순회 다 하고 마지막에 decode("utf-8") 호출
