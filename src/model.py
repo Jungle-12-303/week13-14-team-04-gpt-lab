@@ -113,15 +113,41 @@ class GELU(nn.Module):
 
 class FeedForward(nn.Module):
     """Transformer FFN: Linear -> GELU -> Linear -> Dropout."""
-
+    # 입력 벡터 크기가 d_model이면, 중간에서 잠깐 더 큰 차원으로 확장했다가 다시 d_model로 줄이는 작은 MLP
     def __init__(self, d_model: int, dropout: float = 0.1, mult: int = 4):
         super().__init__()
         # TODO: d_model -> mult*d_model -> d_model 구조의 작은 MLP를 정의하세요.
-        raise NotImplementedError("FeedForward.__init__을 구현하세요.")
+
+        # Linear(입력 feature 수, 출력 feature 수)
+
+        # d_model -> mult*d_model
+        self.first_Linear = nn.Linear(d_model, mult*d_model)
+
+        # GELU -> __init__엔 실제 입력 x 없어서 그냥 인자 안 받음 
+        self.gelu = GELU()
+
+        # mult*d_model -> d_model
+        self.second_Linear = nn.Linear(mult*d_model, d_model) 
+
+        # Dropout
+        self.dropout = nn.Dropout(dropout)
+        
+        # raise NotImplementedError("FeedForward.__init__을 구현하세요.")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """TODO: FeedForward 네트워크를 통과시킵니다."""
-        raise NotImplementedError("FeedForward.forward를 구현하세요.")
+
+        # 인자 x를 통째로 넣어줌 -> 알아서 각 토큰의 hidden 벡터 변환함 
+        first_out  = self.first_Linear(x)
+
+        gelu_out = self.gelu(first_out)
+
+        second_out = self.second_Linear(gelu_out)
+
+        result = self.dropout(second_out)
+
+        return result
+        # raise NotImplementedError("FeedForward.forward를 구현하세요.")
 
 
 class TransformerBlock(nn.Module):
