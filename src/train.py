@@ -192,4 +192,7 @@ def plot_losses(train_losses: list[float], val_losses: list[float] | None = None
     plt.ylabel("Loss")
     plt.legend()
     plt.title("Training / Validation Loss")
-    plt.show()
+    if plt.get_backend().lower() == "agg":
+        plt.close()
+    else:
+        plt.show()
