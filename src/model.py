@@ -3,6 +3,7 @@
 
 import torch
 import torch.nn as nn
+import math
 
 try:
     from .attention import MultiHeadAttention
@@ -62,10 +63,45 @@ class LayerNorm(nn.Module):
 
 class GELU(nn.Module):
     """GPT FeedForward에서 사용하는 GELU 활성화 함수."""
-
+    # Relu와의 차이점: Relu는 음수는 버리고 양수만 살리는 활성화 함수 -> GELU는 버리지 않고 입력값을 부드럽게 조금씩 통과시키는 활성화 함수
+    
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """TODO: tanh 근사식 또는 torch 연산으로 GELU를 구현합니다."""
-        raise NotImplementedError("GELU.forward를 구현하세요.")
+        # 근사식: 복잡한 현상이나 계산하기 어려운 함수의 값을 다루기 쉽고 직관적인 다항식으로 대체하여 어림하는 식 
+        
+        # tanh 근사식 -----------------
+        # 1. 입력 x를 받는다
+        x_origin = x
+
+        # 2. x의 세제곱 항을 만든다 
+        x_cubed = x_origin ** 3
+
+        # 3. x와 x^3을 어떤 상수들과 조합함 -> x_origin에 0.044715 * x_cubed를 더하고 그 전체에 sqrt(2 / pi)를 곱한다
+        # -> 직선적인 x만 쓰면 원래 GELU 곡선을 잘 따라가기 어렵기 때문에 x_cubed 항을 조금 섞어서 곡선을 더 비슷하게 만든다
+        # tanh 근사식에서 사용하는 대표 상수: sqrt(2 / pi) and 0.044715
+        # sqrt(2 / pi): tanh 안쪽 전체에 곱해지는 스케일 상수 -> 입력값의 크기를 조절해서 tanh 곡선이 GELU 모양에 가깝게 나오도록 해줌 
+        # 0.044715: x_cubed 앞에 붙는 보정 계수 -> 곡률 보정용 계수 -> x^3의 영향이 너무 커지지 않게 작게 조절(x^3 항의 세기를 조절)하면서, 그래도 GELU 모양에 가깝게 만들도록 도와줌 
+        # 곡선을 따라간다 = 진짜 GELU 함수가 만드는 출력값과 tanh 근사식이 만드는 출력값이 최대한 비슷하게 나오게 한다 
+        # -> GELU는 어려운 함수라 매번 정확한 계산을 하면 비용이 더 들어가기 때문에 근사식 사용 
+        formula = math.sqrt(2 / math.pi) * (x_origin + 0.044715 * x_cubed)
+        
+        # 4. 그 결과를 tanh 안에 넣고 1을 더함(tanh 적용)
+        gate = torch.tanh(formula) + 1
+
+        # 5. 마지막으로 x와 0.5를 곱해 스케일을 맞춰서 최종 GELU 값을 만듦  
+        # -> x * 부드러운 gate(tanh로 만들어지는 값)
+        # => 입력이 매우 크면 거의 1에 가까워 x 잘 통과
+        # => 입력이 매우 작거나 음수면 덜 통과
+        GELU_out = 0.5 * x * gate
+
+        # +) 수식 한 줄 정리 
+        # GELU_out = 0.5 * x * (torch.tanh(torch.sqrt(2 / torch.pi) * (x_origin + 0.044715 * x_cubed)) + 1)
+
+        # torch 내장 연산 ----------------
+        # Pytorch에서 제공하는 GELU 계산 기능 사용
+
+        return GELU_out
+        # raise NotImplementedError("GELU.forward를 구현하세요.")
 
 
 class FeedForward(nn.Module):
