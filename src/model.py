@@ -14,7 +14,7 @@ except ImportError:
 
 class LayerNorm(nn.Module):
     """마지막 차원 기준 Layer Normalization."""
-
+    # batch 전체를 섞어서 보는 게 아니라 각 토큰 벡터 하나하나를 독립적으로 정규화 
     def __init__(self, normalized_shape: int, eps: float = 1e-5):
         super().__init__()
         self.gamma = nn.Parameter(torch.ones(normalized_shape))
@@ -23,7 +23,41 @@ class LayerNorm(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """TODO: 마지막 차원의 평균과 분산으로 정규화한 뒤 gamma/beta를 적용합니다."""
-        raise NotImplementedError("LayerNorm.forward를 구현하세요.")
+        # x[batch][seq]: batch, seq로 2차원 배열 구성 
+        # hidden: 각 배열 안에 들어가있는 벡터 -> x[batch][seq]에 벡터가 들어있고, 벡터는 내부에 hidden개의 요소를 가지고 있음
+        # LayerNorm: 입력 x에 존재하는 모든 벡터를 순회하면서 각 벡터 내부 요소들로 평균과 분산을 구해야 함
+        # -> 개념적으론 x의 벡터들을 순회해야 하지만, PyTorch 가 제공하는 텐서 연산 함수 사용하면 간단히 구할 수 있음
+        # => 텐서 연산할 때 마지막 차원을 기준으로 연산을 시키면(dim = -1) 알아서 게산해줌 
+
+        # dim: 어느 차원 기준으로 계산할지
+        # keepdim: 계산한 차원을 남길지 말지 - Fasle: 해당 차원 사라짐, True: 해당 차원 크기 1로 남음 
+        # unbiased: 분산을 구할 때 나누는 값을 강제 -> False: N으로 나눔, True: N - 1로 나눔(표본 분산을 구할 때 사용 => 전체 집단을 다 보는 게 아니라 일부 샘플만 보고 전체 분산을 추정하려고 할 때 보정하는 방식)
+        # x.mean(dim, keepdim): 평균 계산, dim =  -1, keepdim = True 
+        mean = x.mean(dim = -1, keepdim = True)
+
+        # x.var(dim, keepdim, unbaised): 분산 계산, dim =  -1, keepdim = True, unbiased = False
+        # unbiased = False: 표본으로 전체를 추정하는 것이 아닌, 현재 벡터 자체를 정규화하기 때문에 False 
+        # 분산: 각 값이 평균에서 얼마나 떨어져 있는지 제곱해서 평균낸 값 
+        var = x.var(dim = -1, keepdim = True, unbiased = False)
+
+        # 표준 편차 = 분산의 제곱근 = torch.sqrt(var)
+        # -> 분산을 구할 때 차이를 제곱 -> 원래 단위로 되돌리기 위해 제곱근 사용 
+        # var가 그냥 숫자가 아니라 torch tensor이기 때문에 math.sqrt가 아닌 torch.sqrt 사용 
+        std_deviation = torch.sqrt(var + self.eps)
+
+        # 정규화된 입력 x = (x - mean) / std_deviation
+        # -> std_deviation로 나누기 때문에 std_deviation가 0이거나 너무 작은 값이 되면 안 됨 -> var에 eps를 더한 상태로 제곱근 사용
+        x_norm = (x - mean) / std_deviation
+
+        # -> 정규화 과정을 거치면 마지막 차원 기준으로 평균 = 대략 0, 분산 = 대략 1로 맞춰짐 
+        # 대략인 이유?: eps를 더하기 때문 
+
+        # 정규화된 값에 학습 가능한 스케일 gamma 곱하고, 이동값 beta 더함
+        # -> 정규화만 하면 표현력이 제할될 수 있으니, 모델이 필요하면 다시 크기와 위치를 조절할 수 있게 해 주는 단계 
+        out_norm = x_norm * self.gamma + self.beta
+
+        return out_norm 
+        # raise NotImplementedError("LayerNorm.forward를 구현하세요.")
 
 
 class GELU(nn.Module):
