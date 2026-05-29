@@ -24,7 +24,7 @@ class LayerNorm(nn.Module):
         self.eps = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """TODO: 마지막 차원의 평균과 분산으로 정규화한 뒤 gamma/beta를 적용합니다."""
+        """ 마지막 차원의 평균과 분산으로 정규화한 뒤 gamma/beta를 적용합니다."""
         # x[batch][seq]: batch, seq로 2차원 배열 구성 
         # hidden: 각 배열 안에 들어가있는 벡터 -> x[batch][seq]에 벡터가 들어있고, 벡터는 내부에 hidden개의 요소를 가지고 있음
         # LayerNorm: 입력 x에 존재하는 모든 벡터를 순회하면서 각 벡터 내부 요소들로 평균과 분산을 구해야 함
@@ -67,7 +67,7 @@ class GELU(nn.Module):
     # Relu와의 차이점: Relu는 음수는 버리고 양수만 살리는 활성화 함수 -> GELU는 버리지 않고 입력값을 부드럽게 조금씩 통과시키는 활성화 함수
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """TODO: tanh 근사식 또는 torch 연산으로 GELU를 구현합니다."""
+        """tanh 근사식 또는 torch 연산으로 GELU를 구현합니다."""
         # 근사식: 복잡한 현상이나 계산하기 어려운 함수의 값을 다루기 쉽고 직관적인 다항식으로 대체하여 어림하는 식 
         
         # tanh 근사식 -----------------
@@ -112,11 +112,11 @@ class GELU(nn.Module):
 
 
 class FeedForward(nn.Module):
-    """Transformer FFN: Linear -> GELU -> Linear -> Dropout."""
+    """ Transformer FFN: Linear -> GELU -> Linear -> Dropout."""
     # 입력 벡터 크기가 d_model이면, 중간에서 잠깐 더 큰 차원으로 확장했다가 다시 d_model로 줄이는 작은 MLP
     def __init__(self, d_model: int, dropout: float = 0.1, mult: int = 4):
         super().__init__()
-        # TODO: d_model -> mult*d_model -> d_model 구조의 작은 MLP를 정의하세요.
+        # d_model -> mult*d_model -> d_model 구조의 작은 MLP를 정의하세요.
 
         # Linear(입력 feature 수, 출력 feature 수)
 
@@ -135,7 +135,7 @@ class FeedForward(nn.Module):
         # raise NotImplementedError("FeedForward.__init__을 구현하세요.")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """TODO: FeedForward 네트워크를 통과시킵니다."""
+        """ FeedForward 네트워크를 통과시킵니다."""
 
         # 인자 x를 통째로 넣어줌 -> 알아서 각 토큰의 hidden 벡터 변환함 
         first_out  = self.first_Linear(x)
@@ -165,7 +165,22 @@ class TransformerBlock(nn.Module):
     ):
         super().__init__()
         # TODO: attention, ffn, layernorm, dropout을 정의하세요.
-        raise NotImplementedError("TransformerBlock.__init__을 구현하세요.")
+
+        # 첫 번째 
+        self.first_layernorm = LayerNorm(d_model)
+
+        self.attention = MultiHeadAttention(d_model=d_model, n_heads=n_heads, drop_rate=drop_rate, qkv_bias=qkv_bias)
+        
+        # 첫 번째 결과 dropout
+        self.dropout = nn.Dropout(drop_rate)
+
+        # 두 번째 
+        self.second_layernorm = LayerNorm(d_model)
+        
+        # 두 번째 결과 
+        self.ffn = FeedForward(d_model, drop_rate)
+
+        # raise NotImplementedError("TransformerBlock.__init__을 구현하세요.")
 
     def forward(self, x: torch.Tensor, causal_mask: bool = True) -> torch.Tensor:
         """TODO: attention과 ffn을 residual connection으로 연결합니다."""
