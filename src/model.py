@@ -195,7 +195,7 @@ class TransformerBlock(nn.Module):
         attention_result = self.attention(before_norm, causal_mask)
 
         attention_result = self.dropout(attention_result)
-        
+
         # attention 이후 Residual connection
         x = x + attention_result
 
@@ -216,8 +216,55 @@ class GPTModel(nn.Module):
     def __init__(self, config: dict):
         super().__init__()
         self.config = config
-        # TODO: embedding, blocks, final layernorm, lm_head를 정의하세요.
-        raise NotImplementedError("GPTModel.__init__을 구현하세요.")
+        # embedding, blocks, final layernorm, lm_head를 정의하세요.
+
+        # GPT_CONFIG_SMALL = {
+        #     "vocab_size": 1000,
+        #     "context_length": 64,
+        #     "emb_dim": 64,
+        #     "n_heads": 4,
+        #     "n_layers": 2,
+        #     "drop_rate": 0.1,
+        #     "qkv_bias": False,
+        # }
+
+        # config에서 각 요소들 꺼내오기 
+        self.vocab_size = config["vocab_size"]
+        self.context_length = config["context_length"]
+        self.d_model = config["emb_dim"] # emb_dim == d_model
+        self.n_heads = config["n_heads"]
+        self.n_layers = config["n_layers"]
+        self.drop_rate = config["drop_rate"]
+        self.qkv_bias = config["qkv_bias"]
+
+        # 입력: config->vocab_size/emb_dim/context_length/drop_rate, 출력:[batch, seq, d_model]
+        self.embedding = InputEmbedding(self.vocab_size, self.d_model, self.context_length, self.drop_rate)
+
+        # block 하나씩 담을 리스트 
+        blocks = []
+
+        # TransformerBlock를 한 개가 아니라 layer 개수만큼 쌓기 
+        for i in range(0, self.n_layers):
+            # 출력: [batch, seq, d_model]
+            block = TransformerBlock(self.d_model, self.n_heads, self.drop_rate, self.qkv_bias)
+
+            # block 하나 만들 때마다 blocks에 넣기 
+            blocks.append(block)
+        
+        # -> 모델 레이어로 등록되는 리스트 구조로 TransformerBlock 여러 개 저장
+        # -> nn.ModuleList or nn.Sequential 사용
+        # => block 담긴 리스트를 TransformerBlock()로 감싸기
+        self.blocks = nn.ModuleList(blocks)
+        
+        # 모든 TransformerBlock을 통과 후 마지막으로 LayerNorm 한 번 더 적용 
+        # LayerNorm에 들어가야하는 d_model 값은 config에 있음  
+        self.final_layernorm = LayerNorm(self.d_model)
+
+        # 마지막 hidden 벡터를 vocab 크기만큼의 logits로 바꾸는 Linear 
+        # 출력: [batch, seq, vocab_size]
+        self.lm_head = nn.Linear(self.d_model, self.vocab_size)
+
+        # raise NotImplementedError("GPTModel.__init__을 구현하세요.")
 
     def forward(
         self,
