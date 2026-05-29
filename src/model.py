@@ -184,7 +184,30 @@ class TransformerBlock(nn.Module):
 
     def forward(self, x: torch.Tensor, causal_mask: bool = True) -> torch.Tensor:
         """TODO: attention과 ffn을 residual connection으로 연결합니다."""
-        raise NotImplementedError("TransformerBlock.forward를 구현하세요.")
+        # Residual connection: 블록이 계산한 결과에 원래 입력을 다시 더해주는 연결
+        # 입력 x -> 연산 -> 연산 결과
+        # 연산 결과 + 입력 x -> output
+        # 깊은 모델에서 정보가 너무 많이 바뀌거나 학습이 어려워지는 걸 막기 위해 수행
+        # -> 모델이 새로 계산한 변화량만 더하도록 하면 필요할 땐 입력 정보를 거의 그대로 유지할 수 있음  
+
+        before_norm = self.first_layernorm(x)
+
+        attention_result = self.attention(before_norm, causal_mask)
+
+        attention_result = self.dropout(attention_result)
+        
+        # attention 이후 Residual connection
+        x = x + attention_result
+
+        after_norm = self.second_layernorm(x)
+
+        ffn_result = self.ffn(after_norm)
+
+        # FFN 이후 Residual connection
+        x = x + ffn_result
+
+        return x
+        # raise NotImplementedError("TransformerBlock.forward를 구현하세요.")
 
 
 class GPTModel(nn.Module):
