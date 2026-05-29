@@ -16,6 +16,7 @@ class MultiHeadAttention(nn.Module):
     - causal mask로 미래 토큰 가리기
     - attention weight와 V를 곱한 뒤 head를 다시 합치기
     """
+    # 토큰들 사이의 관계와 문맥을 섞는다 
 
     def __init__(
         self,

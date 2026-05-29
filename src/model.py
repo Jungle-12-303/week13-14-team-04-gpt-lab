@@ -114,6 +114,9 @@ class GELU(nn.Module):
 class FeedForward(nn.Module):
     """ Transformer FFN: Linear -> GELU -> Linear -> Dropout."""
     # 입력 벡터 크기가 d_model이면, 중간에서 잠깐 더 큰 차원으로 확장했다가 다시 d_model로 줄이는 작은 MLP
+    # -> 표현력을 늘릴 수 있다
+    # -> attention만 있으면 토큰들 사이에서 정보를 섞을 순 있지만 그 섞인 정보를 복잡하게 변환하는 능력 부족
+    # -> FeedForward로 각 토큰 벡터에 작은 MLP를 적용해 중요한 특징은 더 키우고, 덜 중요한 특징은 줄이고, 여러 feature 조합을 비선형적으로 바꿈 
     def __init__(self, d_model: int, dropout: float = 0.1, mult: int = 4):
         super().__init__()
         # d_model -> mult*d_model -> d_model 구조의 작은 MLP를 정의하세요.
@@ -121,12 +124,14 @@ class FeedForward(nn.Module):
         # Linear(입력 feature 수, 출력 feature 수)
 
         # d_model -> mult*d_model
+        # 넓은 공간에서 정보를 조합해서 더 다양한 패턴 표현 
         self.first_Linear = nn.Linear(d_model, mult*d_model)
 
         # GELU -> __init__엔 실제 입력 x 없어서 그냥 인자 안 받음 
         self.gelu = GELU()
 
         # mult*d_model -> d_model
+        # 여러 표현 조합을 만들고 다시 원래 크기로 압축 
         self.second_Linear = nn.Linear(mult*d_model, d_model) 
 
         # Dropout
@@ -155,7 +160,10 @@ class TransformerBlock(nn.Module):
     GPT block: LayerNorm -> Causal Self-Attention -> residual,
     LayerNorm -> FeedForward -> residual.
     """
-
+    # 입력 토큰 벡터를 받아 1. attention, 2. FeedForward 수행 
+    # 1. attention: 각 토큰이 앞에 있는 다른 토큰들을 참고해서 문맥 정보를 섞음 
+    # 2. FeedForward: attention으로 섞인 각 토큰 벡터를 한 번 더 가공함 
+    # -> 두 작업을 묶어서, 문맥을 반영한 더 좋은 토큰 표현을 만든다 
     def __init__(
         self,
         d_model: int,
