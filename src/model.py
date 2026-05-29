@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """GPT 모델 구성 요소 과제 템플릿."""
 
+import math
 import torch
 import torch.nn as nn
-import math
-
+# torch.nn.functional.gelu 사용을 위한 functional API import 
+# import torch.nn.functional as F
 try:
     from .attention import MultiHeadAttention
     from .embeddings import InputEmbedding
@@ -95,11 +96,17 @@ class GELU(nn.Module):
         GELU_out = 0.5 * x * gate
 
         # +) 수식 한 줄 정리 
-        # GELU_out = 0.5 * x * (torch.tanh(torch.sqrt(2 / torch.pi) * (x_origin + 0.044715 * x_cubed)) + 1)
+        # GELU_out = 0.5 * x * (torch.tanh(math.sqrt(2 / math.pi) * (x_origin + 0.044715 * x_cubed)) + 1)
 
         # torch 내장 연산 ----------------
         # Pytorch에서 제공하는 GELU 계산 기능 사용
-
+        # torch.nn.GELU or torch.nn.functional.gelu 사용
+        # torch.nn.GELU: 모듈 클래스, 보통 __init__에서 만들어두고 forward에서 호출하는 스타일
+        # torch.nn.functional.gelu: 함수 형태, forward 안에서 입력 x를 바로 넣어서 계산
+        # -> 이번 프로젝트는 torch.nn.functional.gelu 사용이 조금 더 자연스러움 
+        # -> functional API를 쓰려면 보통 torch.nn.functional을 어떤 이름으로 가져오거나, 전체 경로로 접근해야 함
+        # GELU_out = F.gelu(x)
+        
         return GELU_out
         # raise NotImplementedError("GELU.forward를 구현하세요.")
 
