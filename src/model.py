@@ -4,8 +4,8 @@
 import math
 import torch
 import torch.nn as nn
-# torch.nn.functional.gelu 사용을 위한 functional API import 
-# import torch.nn.functional as F
+# torch.nn.functional.gelu와 torch.nn.functional.cross_entropy 사용을 위한 functional API import 
+import torch.nn.functional as F
 try:
     from .attention import MultiHeadAttention
     from .embeddings import InputEmbedding
@@ -164,6 +164,7 @@ class TransformerBlock(nn.Module):
     # 1. attention: 각 토큰이 앞에 있는 다른 토큰들을 참고해서 문맥 정보를 섞음 
     # 2. FeedForward: attention으로 섞인 각 토큰 벡터를 한 번 더 가공함 
     # -> 두 작업을 묶어서, 문맥을 반영한 더 좋은 토큰 표현을 만든다 
+
     def __init__(
         self,
         d_model: int,
@@ -286,7 +287,106 @@ class GPTModel(nn.Module):
             targets가 None이면 logits
             targets가 있으면 (loss, logits)
         """
-        raise NotImplementedError("GPTModel.forward를 구현하세요.")
+        # 이 단계에서 하는 일: 입력 숫자를 벡터 표현으로 바꾼 뒤 그 표현을 계속 더 많은 정보 표현으로 갱신
+        # -> 토큰 id를 벡터로 바꾼 뒤 문맥을 반영하도록 계속 표현을 업데이트한다 
+
+        # 각 단게별 상태
+        # 1. 토큰 번호
+        # 2. 토큰별 기본 벡터 + 위치 정보 -> embedding
+        # 3.앞 토큰들을 참고한 문맥 반영 벡터 -> 첫 block
+        # 4. 더 복잡한 문맥/패턴이 반영된 벡터 -> 이후 blocks
+        # 5. 각 위치에서 다음 토큰 후보별 점수 -> lm_head 
+
+        # idx: [batch, seq] -> token id => 벡터 X, 그냥 의미 없는 단어 번호
+        # token id를 토큰/위치 임베딩 더한 벡터로 변환 
+        # vocab_size, emb_dim, context_length, drop_rate 이런건 init에서 레이어를 만들 때 사용함
+        # -> 레이어를 실행할 때 넣는 건 실제 입력 데이터 idx 
+        # 출력: [batch, seq, d_model] 텐서 = block에 들어갈 첫 번째 hidden tensor 
+        # -> 임베딩 과정을 거쳐 토큰 아이디를 벡터로 바꾸고 위치 정보를 더함 
+        # => hidden tensor: 각 토큰 위치 단계에서 d_model 개의 숫자 벡터를 저장한 텐서 
+        # [batch, seq, d_model] 텐서는 모델 내부에서 계속 같은 shape를 유지함 -> 안에 있는 숫자들만 바뀜 
+        x = self.embedding(idx)
+
+        # block이 담겨있는 리스트 blocks를 순회하며 설정값이 아닌 이전 단계에서 나온 hidden tensor를 넣어줌
+        # 처음 hidden tensor: 토큰 의미 + 위치 벡터 
+        # block 이후: 문맥을 반영한 토큰 벡터 
+        for block in self.blocks:
+            # 이전 단계에서 나온 hidden tensor: 첫 block -> 임베딩 함수 출력 값, 이후 blocks -> 이전 block의 출력 
+            # -> 연쇄적으로 들어감 -> x = block(x) 
+            # -> x: 원래 입력값 x가 아님!! 현재 단계의 표현을 담은 다른 변수임 
+            x = block(x)
+            # TransformerBlock 안에서 일어나는 일 1. Attention, 2. FeedForward
+            # 1. Attention: 토큰들 사이 정보를 섞음 -> 각 토큰 벡터가 앞 토큰들의 벡터를 참고해서 업데이트 됨 = 문맥 반영
+            # 2. FeedForward: 토큰끼리 섞지 않음, 각 토큰 위치의 벡터를 따로따로 MLP로 변환함 = 벡터 내부 가공 
+            # -> 각 벡터 내부의 feature들을 비선형적으로 조합
+            # => TransformerBlock 전체를 지나면 attention으로 토큰 간 문맥을 섞고, feedforward로 각 토큰 벡터 자체를 더 가공한 hidden tensor가 됨
+
+        # 모든 TransformerBlock을 통과 후 마지막으로 LayerNorm 한 번 더 적용 
+        # -> 각 토큰 벡터를 안정적인 스케일로 맞춤 
+        # -> 입력: [batch, seq, d_model] 출력: [batch, seq, d_model] => shape 안 바뀌고, 각 토큰의 d_model 벡터 값만 정규화 됨 
+        x = self.final_layernorm(x)
+
+        # 마지막 hidden tensor를 vocab 크기만큼의 logits로 바꾸는 Linear 
+        # -> 마지막 hidden tensor를 vocab 점수로 바꾸는 Linear
+        # 출력: [batch, seq, vocab_size]
+        # vocab: 모델이 알고 있는 토큰 사전
+        # vocab_size: vocab에 들어있는 토큰(종류) 개수
+        # GPT 모델에서 사용되는 vocab는?
+        # -> vocab: 입력된 문장 다음에 올 후보 토큰 목록
+        # -> vocab 점수: 그 후보 각각이 다음 토큰일 가능성에 대한 점수 
+        # -> 토큰 위치 하나마다 vocab 전체 후보에 대한 점수표가 생김 => shape 변화
+        # 각 토큰 위치마다 d_model 길이 벡터 hidden tensor가 있음
+        # 이걸 vocabulary 크기만큼의 점수로 바꿈
+        # -> hidden tensor의 요소 개수를 d_model에서 vocab_size로 바꿈
+        # 전체 shape 바뀜 [batch, seq, d_model] -> [batch, seq, vocab_size] 
+        # => 이 결과가 logits = 점수(확률X)
+        # 어떤 위치에서 다음 토큰 후보가 1000개라면, 각 후보마다 점수가 하나씩 나옴
+        # logits[batch_idx][seq_idx]
+        # => 해당 위치에서 vocab 전체 토큰에 대한 점수 벡터
+
+        # -> 이 logits를 소프트맥스 함수에 넣어서 확률을 계산함
+        logits = self.lm_head(x)
+
+        # targets가 있으면 logits와 targets 이용해서 loss 계산
+        # targets: 모델이 맞춰야 하는 정답 토큰 id(진짜 다음에 올 토큰 id)
+        # -> 학습 샘플 튜플의 그 targets(dataset, dataloader -> input 값과 쌍)
+        # 모델 출력 logits: 각 위치마다 vocab 전체 후보에 대한 점수 
+        # 첫 번째 위치 logits = vocab 전체 토큰 점수
+        # target 첫 번째 값 = 정답 토큰 id
+        if targets is not None:
+            # loss: 손실함수의 loss, 모델의 예측 점수와 정답 target을 비교해서 얼마나 틀렸는지 숫자로 나타낸 값(Cross Entropy Loss)
+            # -> loss 값이 작을 수록 모델이 정답에 가까운 예측을 했다는 의미
+            # -> 학습할 땐 이 loss를 줄이는 방향으로 파라미터를 업데이트한다 
+            
+            # logits shape: [batch, seq, vocab_size]
+            # targets shape: [batch, seq]
+            # Cross Entropy가 기대하는 형태
+            # -> 입력 logits: [N, vocab_size] -> N:예측해야 하는 전체 위치 개수
+            # -> 정답 targets: [N]
+            # -> batch, seq 총 2개의 차원을 하나로 합친다 -> N = batch * seq -> reshape(-1)
+            # => 모든 배치의 모든 토큰 위치를 한 줄의 예측 문제 목록으로 만든다
+            re_logits = logits.reshape(-1, self.vocab_size)
+            
+            # targets는 그냥 모든 차원을 하나로 합치면 됨 
+            targets = targets.reshape(-1)
+
+            loss = F.cross_entropy(re_logits, targets)
+
+            return (loss, logits) 
+        # targets가 없으면 여기서 logits만 반환
+        else: 
+            return logits
+
+        #  => GPT Model 순전파는 학습에도 쓰이고 추론에도 쓰이는 공통 함수임 
+        # 학습 단계(정답 있음)
+        # model(idx, targets)로 호출
+        # -> logits 만들고 targets와 비교=> loss 계산
+        # 2. 추론/생성 단계
+        # model(idx)or model(idx, targets=None)로 호출 => targets가 없음
+        # -> 정답 없이 그냥 다음 토큰 점수만 보고 싶은 상황임 -> 그냥 logits만 반환 
+        # -> 반환된 logits 안에서 다음 토큰을 고름 ex) 가장 점수가 높은 토큰 선택 or 확률적으로 샘플링 
+
+        # raise NotImplementedError("GPTModel.forward를 구현하세요.")
 
 
 def generate_text_simple(
