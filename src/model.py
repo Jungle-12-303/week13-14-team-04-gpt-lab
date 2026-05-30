@@ -388,7 +388,6 @@ class GPTModel(nn.Module):
 
         # raise NotImplementedError("GPTModel.forward를 구현하세요.")
 
-
 def generate_text_simple(
     model: GPTModel,
     idx: torch.Tensor,
@@ -396,4 +395,51 @@ def generate_text_simple(
     context_size: int,
 ) -> torch.Tensor:
     """TODO: greedy 방식으로 max_new_tokens만큼 다음 토큰을 이어 붙입니다."""
-    raise NotImplementedError("generate_text_simple을 구현하세요.")
+    # 이미 있는 모델로 다음 토큰을 하나씩 생성하는 함수
+    # idx: 현재까지의 토큰 id -> shape: [batch, current_seq_len]
+
+    # max_new_tokens번 반복 -> 다음 토큰 하나를 예측 -> idx 뒤에 붙임 
+    # 현재 idx에서 모델이 볼 수 있는 길이만 남김
+    # GPT 최대 context 길이 때문에 너무 길어지면 마지막 뒤에서부터 context_size개 토큰만 사용
+    # 토큰 생성 중엔 idx가 계속 길어지기 때문에 모델에 전체를 다 넣지 않고 마지막 context_size개만 넣음 
+    # 뒤에서부터 쓰는 이유: 다음 토큰 예측엔 가장 최근 문맥이 중요, GPT의 위치 임베딩, 어텐션이 처리할 수 있는 최대 길이가 정해져있기 때문 
+    # -> idx[:, -context_size:]
+    # 모든 batch는 유지, 각 batch 문장의 마지막 context_size개 토큰만 사용 
+
+    # 아래 과정을 max_new_tokens번 반복 
+    # 잘라낸 입력을 모델에 넣음
+    # 생성 단계 -> targets는 넣지 않음 
+    # 모델 출력: logits
+    # shape: [batch, seq, vocab_size]
+    for i in range(max_new_tokens):
+        # 마지막 context_size개 토큰만 가져오기(슬라이싱)
+        idx_cond = idx[:, -context_size:]
+
+        # 모델 출력 저장 -> [batch, seq, vocab_size]
+        logits = model(idx_cond)
+
+        # 마지막 위치의 logits만 확인 
+        # 다음 토큰을 예측하려면 전체 seq 중 마지막 토큰 위치의 출력을 봐야 함
+        # shape: [batch, vocab_size]
+        # 마지막 위치 logits 가져오기 -> 마지막 seq 위치 -> [batch, vocab_size] 
+        last_logits = logits[:, -1, :]
+
+        # greedy 방식으로 가장 점수가 높은 토큰 id 고름
+        # greedy: 확률적으로 뽑는 게 아니라 점수가 가장 큰 토큰 선택
+        # torch 최대값의 인덱스를 구하는 연산 사용 
+        # 가장 점수가 높은 vocab index 고름 -> [batch]  
+        next_id = torch.argmax(last_logits, dim=-1)
+
+        # idx를 붙이기 위해 차원을 하나 추가 -> [batch, 1]   
+        next_id = next_id.unsqueeze(1)
+
+        # 고른 토큰 id를 기존 idx 뒤에 붙임 
+        # 기존 idx: [batch, current_seq_len]
+        # 새 토큰: [batch, 1]
+        # 붙인 결과: [batch, current_seq_len + 1]
+        # 기존 idx 뒤에 새 토큰을 붙임
+        # -> dim=1(=seq) 차원 방향으로 붙인다
+        idx = torch.cat((idx, next_id), dim = 1)
+         
+    return idx
+    # raise NotImplementedError("generate_text_simple을 구현하세요.")
