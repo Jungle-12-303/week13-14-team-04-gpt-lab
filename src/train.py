@@ -3,7 +3,7 @@
 
 import matplotlib.pyplot as plt
 import torch
-
+import torch.nn.functional as F
 try:
     from .model import GPTModel
 except ImportError:
@@ -17,7 +17,40 @@ def calc_loss_batch(
     device: torch.device,
 ) -> torch.Tensor:
     """TODO: 한 배치를 device로 옮긴 뒤 다음 토큰 예측 cross entropy loss를 계산합니다."""
-    raise NotImplementedError("calc_loss_batch를 구현하세요.")
+    # 1. input_batch, target_batch를 device로 옮김
+    # 모델이 GPU에 있으면 입력 텐서도 같은 GPU에 있어야 함
+    input_batch = input_batch.to(device)
+    target_batch = target_batch.to(device)
+
+
+    # 2. 모델에 input_batch를 넣어서 logits를 얻음
+    # GPT 모델 출력은 보통 shape -> [batch_size, sequence_length, vocab_size] = [B, T, V]
+    # -> 각 배치의 각 위치마다 다음 토큰이 vocab 중 무엇일지에 대한 점수를 냄 
+    logits = model(input_batch)
+
+    # reshape를 위해 vocab_size 구하기 
+    vocab_size = logits.shape[-1]
+
+    # 3. target_batch: 정답 토큰 ID
+    # shape -> [batch_size, sequence_length] = [B, T]
+    # -> 각 위치에서 맞혀야 하는 실제 다음 토큰 ID가 들어있음
+
+    # 4. cross_entropy에 넣기 위해 reshape 
+    # Cross Entropy Loss가 원하는 입력 -> 
+    # prediction: [N, vocab_size]
+    # target:     [N]
+    # -> logits: 3차원, target: 2차원
+    # => batch와 sequence 차원을 하나로 펼쳐야 함
+    # => logits:  [B, T, V] -> [B*T, V]
+    # => target:  [B, T]    -> [B*T]
+    re_logits = logits.reshape(-1, vocab_size) # 마지막 차원을 vocab_size 개씩 묶고, 앞 차원 개수는 알아서 계산 
+    re_target = target_batch.reshape(-1) # 그냥 모든 차원을 하나로 합치면 됨 
+
+    # 5. 펼친 logits와 target으로 loss 계산 -> 모든 토큰 위치에 대한 평균 loss 나옴 
+    loss = F.cross_entropy(re_logits, re_target)
+
+    return loss 
+    # raise NotImplementedError("calc_loss_batch를 구현하세요.")
 
 
 def calc_loss_loader(
