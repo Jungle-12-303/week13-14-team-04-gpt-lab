@@ -22,7 +22,6 @@ def calc_loss_batch(
     input_batch = input_batch.to(device)
     target_batch = target_batch.to(device)
 
-
     # 2. 모델에 input_batch를 넣어서 logits를 얻음
     # GPT 모델 출력은 보통 shape -> [batch_size, sequence_length, vocab_size] = [B, T, V]
     # -> 각 배치의 각 위치마다 다음 토큰이 vocab 중 무엇일지에 대한 점수를 냄 
