@@ -23,14 +23,28 @@ class LayerNorm(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """TODO: 마지막 차원의 평균과 분산으로 정규화한 뒤 gamma/beta를 적용합니다."""
+        mean = x.mean(dim=-1, keepdim=True)
+        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        x_hat = (x - mean) / torch.sqrt(var)
+        output = self.gamma * x_hat + self.beta
+        return output
         raise NotImplementedError("LayerNorm.forward를 구현하세요.")
 
 
 class GELU(nn.Module):
     """GPT FeedForward에서 사용하는 GELU 활성화 함수."""
+    def __init__():
+        super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """TODO: tanh 근사식 또는 torch 연산으로 GELU를 구현합니다."""
+        # 근사식
+        output = 0.5 * x *(1 + torch.tanh(torch.sqrt(2.0 / torch.pi) * (x + 0.044715 * torch.pow(x,3))))
+        # torch 연산
+        # gelu = nn.GELU()
+        # y = gelu(x)
+
+        return output
         raise NotImplementedError("GELU.forward를 구현하세요.")
 
 
@@ -40,10 +54,16 @@ class FeedForward(nn.Module):
     def __init__(self, d_model: int, dropout: float = 0.1, mult: int = 4):
         super().__init__()
         # TODO: d_model -> mult*d_model -> d_model 구조의 작은 MLP를 정의하세요.
-        raise NotImplementedError("FeedForward.__init__을 구현하세요.")
+        self.layers = nn.Sequential(
+            nn.Linear(d_model, d_model * mult),
+            GELU(),
+            nn.Linear(d_model * mult, d_model)
+        )
+        # raise NotImplementedError("FeedForward.__init__을 구현하세요.")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """TODO: FeedForward 네트워크를 통과시킵니다."""
+        return self.layers(x)
         raise NotImplementedError("FeedForward.forward를 구현하세요.")
 
 
