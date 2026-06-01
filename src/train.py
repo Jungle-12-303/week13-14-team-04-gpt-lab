@@ -127,7 +127,7 @@ def calc_loss_loader(
         # -> nan 값으로 처리 
         return float("nan")
 
-    # 7. 평균 .loss 반환
+    # 7. 평균 loss 반환
     # -> total_loss / 실제 반복한 배치 수(processed_batches)
     return total_loss / processed_batches 
      
@@ -141,7 +141,26 @@ def save_checkpoint(
     path: str,
 ) -> None:
     """TODO: model/optimizer 상태, epoch, global_step을 torch.save로 저장합니다."""
-    raise NotImplementedError("save_checkpoint를 구현하세요.")
+    # torch.save는 json과 다르게 문자열 경로로 path를 받을 수 있음
+    # -> 전달받은 path가 str이라 path = Path(path) 따로 안 해도 됨
+    
+    # model/optimizer 상태: model/optimizer가 학습 중 들고 있는 숫자 값  
+    # model.state_dict(): 토큰 임베딩 가중치, attention layer 가중치, linear layer weight/bias, layer norm 값... 
+    # => model 파라미터 
+    # optimizer.state_dict(): learning rate 같은 설정, momentum/variance 누적값, 각 파라미터별 step 정보
+    # => optimizer가 학습을 이어가기 위해 필요한 내부 값 
+
+    save_dict = {}
+
+    save_dict["model"] = model.state_dict() 
+    save_dict["optimizer"] = optimizer.state_dict() 
+    save_dict["epoch"] = epoch
+    save_dict["global_step"] = global_step
+
+    # 저장 
+    torch.save(save_dict, path)
+
+    # raise NotImplementedError("save_checkpoint를 구현하세요.")
 
 
 def load_checkpoint(
