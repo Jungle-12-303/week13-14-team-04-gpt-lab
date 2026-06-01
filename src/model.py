@@ -33,13 +33,13 @@ class LayerNorm(nn.Module):
 
 class GELU(nn.Module):
     """GPT FeedForward에서 사용하는 GELU 활성화 함수."""
-    def __init__():
+    def __init__(self):
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """TODO: tanh 근사식 또는 torch 연산으로 GELU를 구현합니다."""
         # 근사식
-        output = 0.5 * x *(1 + torch.tanh(torch.sqrt(2.0 / torch.pi) * (x + 0.044715 * torch.pow(x,3))))
+        output = 0.5 * x *(1 + torch.tanh(((2.0 / torch.pi) ** 0.5) * (x + 0.044715 * torch.pow(x,3))))
         # torch 연산
         # gelu = nn.GELU()
         # y = gelu(x)
@@ -57,7 +57,8 @@ class FeedForward(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(d_model, d_model * mult),
             GELU(),
-            nn.Linear(d_model * mult, d_model)
+            nn.Linear(d_model * mult, d_model),
+            nn.Dropout(dropout)
         )
         # raise NotImplementedError("FeedForward.__init__을 구현하세요.")
 
@@ -82,12 +83,28 @@ class TransformerBlock(nn.Module):
     ):
         super().__init__()
         # TODO: attention, ffn, layernorm, dropout을 정의하세요.
-        raise NotImplementedError("TransformerBlock.__init__을 구현하세요.")
+        self.norm1 = LayerNorm(d_model)
+        self.attention = MultiHeadAttention(d_model, n_heads, drop_rate, qkv_bias)
+        self.dropout = nn.Dropout(drop_rate)
+
+        self.norm2 = LayerNorm(d_model)
+        self.ffn = FeedForward(d_model, drop_rate)
+
+        # raise NotImplementedError("TransformerBlock.__init__을 구현하세요.")
 
     def forward(self, x: torch.Tensor, causal_mask: bool = True) -> torch.Tensor:
         """TODO: attention과 ffn을 residual connection으로 연결합니다."""
-        raise NotImplementedError("TransformerBlock.forward를 구현하세요.")
+        shortcut = x
+        x = self.norm1(x)
+        x = self.attention(x,causal_mask)
+        x = shortcut + self.dropout(x)
 
+        shortcut = x
+        x = self.norm2(x)
+        x = self.ffn(x)
+        logits = shortcut + x
+        return logits 
+        raise NotImplementedError("TransformerBlock.forward를 구현하세요.")
 
 class GPTModel(nn.Module):
     """InputEmbedding -> TransformerBlock N개 -> LayerNorm -> LM head."""
@@ -96,7 +113,13 @@ class GPTModel(nn.Module):
         super().__init__()
         self.config = config
         # TODO: embedding, blocks, final layernorm, lm_head를 정의하세요.
-        raise NotImplementedError("GPTModel.__init__을 구현하세요.")
+        self.embed = InputEmbedding(config["vocab_size"], config["emb_dim"], config["context_length"], config["drop_rate"])
+        self.tfb = nn.Sequential(*[TransformerBlock(config["emb_dim"],config["n_heads"],config["drop_rate"],config["qkv_bias"]) for _ in range(config["n_layers"])])
+        self.norm = LayerNorm(config["emb_dim"])
+        self.linear = nn.Linear(config["emb_dim"],config["vocab_size"])
+        self.ce = nn.CrossEntropyLoss()
+
+        # raise NotImplementedError("GPTModel.__init__을 구현하세요.")
 
     def forward(
         self,
@@ -110,6 +133,16 @@ class GPTModel(nn.Module):
             targets가 None이면 logits
             targets가 있으면 (loss, logits)
         """
+        idx = self.embed(idx)
+        idx = self.tfb(idx)
+        idx = self.norm(idx)
+        logits = self.linear(idx)
+        if targets != None:
+            B, T, C = logits.shape
+            ce = self.ce(logits.view(B*T,C), targets.view(B*T))
+            return (ce,logits)
+        else:
+            return logits
         raise NotImplementedError("GPTModel.forward를 구현하세요.")
 
 
@@ -120,4 +153,12 @@ def generate_text_simple(
     context_size: int,
 ) -> torch.Tensor:
     """TODO: greedy 방식으로 max_new_tokens만큼 다음 토큰을 이어 붙입니다."""
-    raise NotImplementedError("generate_text_simple을 구현하세요.")
+    for _ in range(max_new_tokens):
+        idx_cond = idx[:,-context_size:]
+        with torch.no_grad():
+            logits = model(idx_cond)[:,-1,:]
+        probs = torch.softmax(logits,dim=-1)
+        last_word = torch.argmax(probs,dim=-1,keepdim=True)
+        idx = torch.cat((idx,last_word),dim=1)
+    return idx
+    # raise NotImplementedError("generate_text_simple을 구현하세요.")

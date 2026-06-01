@@ -240,7 +240,6 @@ class BPETokenizer:
         - byte를 하나씩 decode하지 말고, 마지막에 `bytes(...).decode("utf-8")`를 한 번만 호출합니다.
         """
         result_word = b''
-        special_status = [False,False,False,False]
         for idx in ids:
             if idx < BYTE_OFFSET:
                 if skip_special:
@@ -249,14 +248,25 @@ class BPETokenizer:
                     result_word = result_word + self.id_to_token[idx].encode("utf-8")
 
             elif idx >= BYTE_OFFSET + NUM_BYTES:
-                idx_byte = idx
-                add_word = ""
-                total_word = ""
-                while idx_byte >= BYTE_OFFSET + NUM_BYTES:
-                    idx_byte, add_word = self.id_to_token[idx_byte]
-                    total_word = add_word + total_word
-                result_word = result_word + idx_byte + total_word
+                result_word = result_word + self.decode_token(idx, skip_special)
             else:
                 result_word = result_word + self.id_to_token[idx]
         return result_word.decode("utf-8")
         # raise NotImplementedError("BPETokenizer.decode를 구현하세요.")
+        
+    def decode_token(self, token_id: int, skip_special:bool) -> bytes:
+        token = self.id_to_token[token_id]
+        
+        if isinstance(token, bytes):
+            return token
+
+        if isinstance(token, tuple):
+            left, right = token
+            return self.decode_token(left,skip_special) + self.decode_token(right,skip_special)
+
+        if isinstance(token, str):
+            if skip_special:
+                return b""
+            return token.encode("utf-8")
+
+        raise TypeError(f"Unknown token type: {type(token)}")
