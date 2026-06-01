@@ -162,7 +162,6 @@ def save_checkpoint(
 
     # raise NotImplementedError("save_checkpoint를 구현하세요.")
 
-
 def load_checkpoint(
     model: GPTModel,
     optimizer: torch.optim.Optimizer | None,
@@ -170,7 +169,20 @@ def load_checkpoint(
     device: torch.device,
 ) -> tuple[int, int]:
     """TODO: torch.load로 checkpoint를 읽어 model/optimizer 상태를 복원합니다."""
-    raise NotImplementedError("load_checkpoint를 구현하세요.")
+    # save에서 저장된 텐서가 GPU에서 저장됐는데 load는 CPU에서 하고 싶을 수 있음
+    # -> load를 어느 장치에서 할지 명시(저장된 텐서를 device로 옮겨서 load)
+    checkpoint = torch.load(path, map_location=device)
+
+    model.load_state_dict(checkpoint["model"])
+
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint["optimizer"])
+
+    epoch = checkpoint["epoch"] 
+    global_step = checkpoint["global_step"]
+
+    return (epoch, global_step)
+    # raise NotImplementedError("load_checkpoint를 구현하세요.")
 
 
 def generate(
