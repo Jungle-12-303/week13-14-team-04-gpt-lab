@@ -160,11 +160,11 @@ Basic 모델의 전체 parameter 수는 924,416개다. 모듈별로 나누면 em
 
 ### 7.1 Basic full 실험
 
-Basic 실험은 이후 비교 실험의 기준 설정으로 진행했다. 학습을 완료한 뒤에는 50 epoch ablation 결과와 실제 로그를 함께 보며 설정별 차이를 정리했다. 아래 그래프에서 주황색 막대는 Basic 설정, 초록색 막대는 각 카테고리에서 가장 낮은 final validation loss를 보인 값이다. 보라색은 두 조건이 같은 경우다.
+Basic 실험은 최적 hyperparameter를 찾기 위한 최종 모델이 아니라, 과제 구현이 실제 학습으로 이어지는지 확인하고 이후 비교 실험의 출발점으로 삼기 위한 기준 실험이다. 학습을 완료한 뒤에는 50 epoch ablation 결과와 실제 로그를 함께 보며 설정별 차이를 정리했다. 아래 그래프에서 주황색 막대는 Basic 설정, 초록색 막대는 각 카테고리에서 가장 낮은 final validation loss를 보인 값이다. vocab_size는 loss scale이 달라지는 항목이라 이 요약 그래프에서 제외하고 8.5에서 참고 실험으로 따로 다룬다.
 
 ![50 epoch ablation summary](figures/ablation50_summary.png)
 
-그래프의 값은 50 epoch 비교 실험의 final validation loss다. dropout 0.1은 세 후보 중 가장 낮았고, learning_rate 1e-3, context_length 64, emb_dim 256, n_layers 4, batch_size 16은 Basic 값보다 낮은 validation loss를 보였다. vocab_size는 class 수와 tokenization 단위가 함께 바뀌기 때문에 loss 숫자는 참고 지표로 사용했다. 아래 표에서 `train tokens`, `validation tokens`, `train batches`, `validation batches`, `소요 시간`은 직접 고른 hyperparameter가 아니라 선택한 데이터와 설정에서 나온 결과값이다.
+그래프의 값은 50 epoch 비교 실험의 final validation loss다. dropout 0.1은 세 후보 중 가장 낮았고, learning_rate 1e-3, context_length 64, emb_dim 256, n_layers 4, batch_size 16은 Basic 값보다 낮은 validation loss를 보였다. 이 값들은 Basic 모델을 사후에 대체했다는 뜻이 아니라, 다음 조합 실험에서 우선 확인할 후보로 해석했다. 아래 표에서 `train tokens`, `validation tokens`, `train batches`, `validation batches`, `소요 시간`은 직접 고른 hyperparameter가 아니라 선택한 데이터와 설정에서 나온 결과값이다.
 
 | 항목 | 값 | 수치 근거 |
 | --- | --- | --- |
@@ -173,7 +173,7 @@ Basic 실험은 이후 비교 실험의 기준 설정으로 진행했다. 학습
 | validation tokens | 78,686 | 전체 token 중 약 8.0%가 validation으로 사용됐다. train과 분리된 데이터에서 loss를 확인하기 위한 기준이다 |
 | train batches | 220 | context_length 128, batch_size 32 기준 한 batch가 최대 4,096 token을 처리한다. 220 batch는 1 epoch당 약 900k token을 한 번 훑는 규모다 |
 | validation batches | 20 | validation도 같은 batch 설정으로 20 batch가 만들어졌다. 매 평가마다 전체 validation split을 큰 비용 없이 확인할 수 있는 규모였다 |
-| vocab_size | 2000 | vocab ablation 50 epoch final val_loss는 1000/2000/4000에서 3.8539/4.9428/5.8579였다. vocab_size가 달라지면 loss scale도 달라지므로, Basic에서는 중간값인 2000을 사용했다 |
+| vocab_size | 2000 | vocab_size가 달라지면 tokenization 단위와 class 수가 함께 바뀐다. 따라서 다른 hyperparameter처럼 loss 숫자로 직접 고르지 않고, 과제 Basic 규모의 중간값인 2000을 기준값으로 사용했다 |
 | context_length | 128 | context ablation 50 epoch final val_loss는 64/128/256에서 4.7285/4.9428/5.0630이었다. 64가 가장 낮았고, 128은 더 긴 생성 문맥을 쓰는 기준값으로 사용했다 |
 | emb_dim | 128 | emb_dim ablation 50 epoch final val_loss는 64/128/256에서 5.0749/4.9428/4.8984였다. 256은 best val_loss 4.8284를 epoch 27에서 기록했다 |
 | n_heads | 4 | n_heads ablation 50 epoch final val_loss는 2/4/8에서 4.9240/4.9428/4.9610이었다. 차이는 크지 않았고 2 heads가 가장 낮았다 |
@@ -187,7 +187,7 @@ Basic 실험은 이후 비교 실험의 기준 설정으로 진행했다. 학습
 | 소요 시간 | 1097.9초 | Basic 3 epoch의 실제 실행 시간이다. 약 18.3분이었고, 이 기록을 기준으로 장시간 추가 학습을 계획했다 |
 | checkpoint | `checkpoints/basic_full_final.pt` | 3 epoch 시점 final_val_loss는 6.1680이었다. 이 checkpoint에서 이어 학습한 결과 best_val_loss 4.5587까지 내려갔다 |
 
-Basic 설정과 50 epoch ablation 결과를 비교하면 다음처럼 정리할 수 있다.
+Basic 설정과 50 epoch ablation 결과를 비교하면 다음처럼 정리할 수 있다. 여기서 Basic 값은 최적값이라는 뜻이 아니라, 장시간 학습과 비교 실험의 기준값이다.
 
 | 항목 | Basic 값 | 50 epoch에서 낮았던 값 | 해석 |
 | --- | --- | --- | --- |
@@ -255,10 +255,11 @@ Validation loss는 계속 감소했지만 후반으로 갈수록 감소 속도�
 | 1000-1099 | 3.9788 | 4.5687 | 0.0024 |
 | 1100-1199 | 3.9659 | 4.5673 | 0.0014 |
 | 1200-1299 | 3.9544 | 4.5653 | 0.0020 |
+| 1300-1392 | 3.9448 | 4.5625 | 0.0028 |
 
 최종 저장 시점은 epoch 1392였고, 이때 train loss는 3.9407, validation loss는 4.5587이었다.
 
-초기 구간인 100-199 -> 200-299에서는 평균 validation loss가 0.0831 감소했다. 반면 900-999 이후에는 구간 평균 감소량이 0.002 안팎으로 줄었다. endpoint 비교보다 구간 평균 비교가 더 안정적인데, 이 기준에서도 후반부 개선 폭은 초기 대비 매우 작다. 마지막 구간에서 감소량이 약간 커지는 부분은 절대 크기가 0.001 단위라 plateau 주변의 작은 변동으로 보았다.
+초기 구간인 100-199 -> 200-299에서는 평균 validation loss가 0.0831 감소했다. 반면 900-999 이후에는 구간 평균 감소량이 0.0014~0.0028 범위로 줄었다. 1300-1392 구간은 100 epoch가 아니라 93 epoch로 이루어진 마지막 partial 구간이다. endpoint 비교보다 구간 평균 비교가 더 안정적인데, 이 기준에서도 후반부 개선 폭은 초기 대비 매우 작다.
 
 그래프는 `checkpoints/basic_monitor_history.json`의 loss 기록을 사용해 작성했다.
 
@@ -317,15 +318,15 @@ prompt: 스토리는
 그 당신을 위한 영국, 한심한 그것만으로도 충분히 현실성을 주는 것이 아닌 흑백의 정체성이 너무 많아서 좋았어요. 특히 땜에님
 ```
 
-짧은 초기 학습 단계에서는 깨진 byte 조각이 많았지만, 장시간 Basic 학습 후에는 NSMC 리뷰 도메인의 표현인 `평점`, `재미`, `감동`, `지루`, `영화`, `드라마` 등이 문맥 안에서 더 자연스럽게 나타났다.
+짧은 초기 학습 단계에서는 깨진 byte 조각이 많았지만, 장시간 Basic 학습 후에는 NSMC 리뷰 도메인의 표현인 `평점`, `재미`, `감동`, `지루`, `영화`, `드라마` 등이 더 자주 나타났다. 다만 문장 구조가 어색한 부분, 의미가 끊기는 부분, 반복 표현은 여전히 남아 있었다. 따라서 생성 샘플은 완성된 언어 품질의 증거라기보다, validation loss 감소가 실제 도메인 표현 학습으로 일부 이어졌는지 확인하는 보조 근거로 보았다.
 
 ---
 
 ## 8. Hyperparameter Ablation
 
-아래 실험은 Basic 설정을 기준으로 두고 한 번에 하나의 요소만 바꾸는 방식으로 진행했다. 모든 카테고리는 50 epoch로 맞춰 비교했다.
+아래 실험은 Basic 설정을 기준으로 두고 한 번에 하나의 요소만 바꾸는 방식으로 진행했다. 모든 카테고리는 50 epoch로 맞춰 비교했다. 기본 비교 기준은 final validation loss다. best validation loss와 final validation loss가 크게 다른 경우는 후반부 불안정성이나 과적합 신호로 별도 해석했다.
 
-vocab_size 실험은 tokenization 단위와 cross entropy의 클래스 수가 함께 달라지므로 loss 숫자를 그대로 비교하지 않았다.
+vocab_size 실험은 tokenization 단위와 cross entropy의 클래스 수가 함께 달라지므로 다른 항목과 같은 방식으로 loss 숫자를 비교하지 않았다. 따라서 8.5의 vocab_size 결과는 hyperparameter 선택 근거가 아니라 참고 실험으로 분리했다.
 
 개별 그래프는 각 항목 아래에 함께 배치했다. 그래프는 한눈에 경향을 보기 위한 용도이고, 표는 정확한 수치를 확인하기 위한 용도다.
 
@@ -379,7 +380,7 @@ dropout 0.1이 가장 낮았다. dropout 0.0은 epoch 20에서 best를 찍은 �
 
 AdamW와 Adam은 거의 같았고, AdamW weight_decay 0.01이 아주 조금 낮았다. SGD는 loss가 거의 내려가지 않았다.
 
-### 8.5 Vocab Size
+### 8.5 Vocab Size 참고 실험
 
 ![Vocab size ablation](figures/ablation50_vocab_size.png)
 
@@ -389,7 +390,7 @@ AdamW와 Adam은 거의 같았고, AdamW weight_decay 0.01이 아주 조금 낮�
 | 2000 | 4.9428 | 4.9428 | 50 |
 | 4000 | 5.8579 | 5.8551 | 46 |
 
-vocab_size는 loss 숫자를 직접 비교하지 않았다. vocab_size가 바뀌면 tokenization 단위와 class 수가 함께 바뀌기 때문에, 같은 validation loss 축 위에서 다른 hyperparameter처럼 해석하면 안 된다.
+vocab_size는 loss 숫자를 직접 비교하지 않았다. vocab_size가 바뀌면 tokenization 단위와 class 수가 함께 바뀌기 때문에, 같은 validation loss 축 위에서 다른 hyperparameter처럼 해석하면 안 된다. 이 실험에서 확인할 수 있는 것은 vocab_size 변경이 token 수와 예측 class 수까지 바꾸는 큰 설계 변경이라는 점이다. 실제 vocab_size 선택은 loss 하나가 아니라 생성 품질, token 수, byte 조각 빈도, bits-per-byte 같은 지표를 함께 봐야 한다.
 
 ### 8.6 Context Length
 
@@ -528,7 +529,7 @@ fine-tuning 실험 설정은 다음과 같다.
 | --- | ---: | ---: |
 | test | 0.4224 | 0.8022 |
 
-처음 classifier head를 붙인 직후 validation accuracy는 0.5005로 거의 무작위 분류 수준이었다. 3 epoch fine-tuning 후 validation accuracy는 0.8003, test accuracy는 0.8022까지 올라갔다. 즉 사전학습된 GPT hidden state 위에 분류 head를 붙이고 supervised loss로 조정하면 NSMC 감성 분류에도 사용할 수 있음을 확인했다.
+처음 classifier head를 붙인 직후 validation accuracy는 0.5005로 거의 무작위 분류 수준이었다. 3 epoch fine-tuning 후 validation accuracy는 0.8003, test accuracy는 0.8022까지 올라갔다. 이 결과는 pretrained checkpoint를 초기값으로 사용한 fine-tuning pipeline이 subset 기준 NSMC 분류 학습까지 동작했음을 보여준다. 다만 random initialization 또는 frozen backbone baseline과 비교하지 않았으므로, 이 수치만으로 사전학습 효과의 크기를 분리해 주장하지는 않았다.
 
 이 실험은 subset 기준이므로 전체 train/validation/test 데이터 기준 성능과는 다를 수 있다. 전체 데이터 기준으로 측정하려면 노트북 62번째 코드 셀에서 `TRAIN_LIMIT`, `VAL_LIMIT`, `TEST_LIMIT`를 `None`으로 바꾸면 된다.
 
@@ -544,7 +545,7 @@ fine-tuning 실험 설정은 다음과 같다.
 | GPU | NVIDIA GeForce RTX 5090 |
 | 주요 실행 파일 | `gpt-lab.ipynb` |
 | 주요 checkpoint | `checkpoints/basic_monitor_best.pt` |
-| 주요 실험 로그 | `checkpoints/basic_monitor_history.json`, `checkpoints/ablation50_*.json`, `checkpoints/finetune_accuracy_report.json` |
+| 주요 실험 로그 | 로컬 산출물: `checkpoints/basic_monitor_history.json`, `checkpoints/ablation50_*.json`, `checkpoints/finetune_accuracy_report.json` |
 
 data, vocab, checkpoint, ablation 결과 JSON은 로컬 실험 산출물이며 `.gitignore` 대상이다.
 
@@ -558,9 +559,9 @@ data, vocab, checkpoint, ablation 결과 JSON은 로컬 실험 산출물이며 `
 4. Basic 모델은 epoch 1392에서 validation loss 4.5587까지 감소했다.
 5. 900 epoch 이후에는 100 epoch 구간 평균 validation loss 감소량이 0.002 안팎으로 줄어 plateau에 가까운 흐름을 보였다.
 6. 50 epoch ablation에서 activation은 SiLU 4.9352, GELU 4.9428로 가까웠고, Sigmoid는 4.9773으로 가장 높았다.
-7. learning_rate 1e-3, context_length 64, emb_dim 256, n_layers 4, batch_size 16이 Basic 값보다 낮은 validation loss를 보였다.
+7. learning_rate 1e-3, context_length 64, emb_dim 256, n_layers 4, batch_size 16은 Basic 값보다 낮은 validation loss를 보여 다음 조합 실험 후보로 남겼다.
 8. dropout 0.1은 세 후보 중 가장 낮았고, dropout 0.0은 epoch 20 이후 validation loss가 다시 증가했다.
-9. fine-tuning은 subset 기준 validation accuracy 0.8003, test accuracy 0.8022를 기록했다.
+9. fine-tuning은 subset 기준 validation accuracy 0.8003, test accuracy 0.8022를 기록했고, 사전학습 효과의 크기는 별도 baseline 비교가 필요하다.
 
 ---
 
@@ -570,4 +571,5 @@ data, vocab, checkpoint, ablation 결과 JSON은 로컬 실험 산출물이며 `
 - ablation은 50 epoch 단일 변수 비교이므로, 좋은 값을 조합했을 때도 같은 방향으로 좋아지는지는 추가 검증이 필요하다.
 - Basic 모델은 아직 문법 오류와 반복이 남아 있어 더 큰 모델 또는 더 긴 학습을 시도할 수 있다.
 - fine-tuning은 subset 기준으로만 측정했으므로, 전체 데이터 기준 accuracy를 추가로 확인할 수 있다.
+- fine-tuning 결과에서 사전학습 효과를 분리하려면 random initialization backbone 또는 frozen backbone baseline과 비교해야 한다.
 - 다음 실험에서는 `learning_rate=1e-3`, `context_length=64`, `emb_dim=256`, `n_layers=4`, `batch_size=16`을 단계적으로 조합해 검증하는 것이 좋다.
