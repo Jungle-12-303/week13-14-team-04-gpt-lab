@@ -8,7 +8,7 @@
 | 담당자 | 모두 |
 | 프로젝트 | PyTorch 기반 mini GPT 직접 구현 |
 | 실험 환경 | 로컬 GPU 환경 |
-| 최종 작성일 | 2026-06-01 |
+| 최종 작성일 | 2026-06-02 |
 
 ---
 
@@ -35,7 +35,7 @@
 | 사전학습 | Basic 모델 validation loss가 6.1680에서 4.5587까지 감소 |
 | 수렴성 | 100 epoch 구간 평균 기준, 후반부 validation loss 개선 폭이 0.002 안팎으로 축소 |
 | ablation | 50 epoch 비교 실험에서 learning_rate 1e-3, context_length 64, emb_dim 256, n_layers 4, batch_size 16이 낮은 validation loss를 보임 |
-| 남은 작업 | fine-tuning은 구현과 단위 테스트까지 확인했고, accuracy 기록은 포함하지 않음 |
+| fine-tuning | subset 기준 NSMC validation accuracy 0.8003, test accuracy 0.8022 |
 
 ---
 
@@ -134,6 +134,24 @@ x = x + Attention(LayerNorm(x))
 x = x + FeedForward(LayerNorm(x))
 ```
 
+### 6.1 Parameter Count
+
+Basic 모델의 전체 parameter 수는 924,416개다. 모듈별로 나누면 embedding과 LM head가 큰 비중을 차지하고, TransformerBlock 2개가 실제 문맥 처리의 중심을 맡는다.
+
+| 모듈 | parameter 수 | 해석 |
+| --- | ---: | --- |
+| token + position embedding | 272,384 | token ID와 위치 ID를 128차원 벡터로 바꾸는 부분 |
+| TransformerBlock x 2 | 395,776 | attention과 feed-forward로 문맥 정보를 섞는 부분 |
+| final LayerNorm | 256 | 마지막 hidden state의 분포를 정리하는 부분 |
+| LM head | 256,000 | hidden state를 vocab_size 2000개의 다음 token 점수로 바꾸는 부분 |
+| 전체 | 924,416 | Basic 설정의 전체 학습 parameter 수 |
+
+### 6.2 Loss 해석
+
+사전학습 loss는 다음 token을 맞히는 cross entropy다. 모델이 정답 token에 높은 확률을 줄수록 loss가 낮아진다. 따라서 validation loss 감소는 학습 데이터가 아닌 분리된 validation 문장에서도 다음 token 예측이 개선되었다는 의미다.
+
+다만 loss가 낮아졌다고 항상 생성 문장이 완전히 자연스러워지는 것은 아니다. 생성 품질은 sampling 방식, 반복, 문법, 도메인 표현까지 함께 봐야 한다. 그래서 본 보고서에서는 validation loss, 생성 샘플, 수렴 흐름을 함께 확인했다.
+
 ---
 
 ## 7. 사전학습 실험
@@ -168,6 +186,17 @@ Basic 실험은 이후 비교 실험의 기준 설정으로 진행했다. 학습
 | epoch | 3 | Basic 3 epoch 동안 train loss가 7.0618 -> 6.4957로 감소했고, step 200/400/600 validation loss도 6.9280 -> 6.3138로 감소했다. 그래서 3 epoch 후 추가 학습을 이어갈 근거가 생겼다 |
 | 소요 시간 | 1097.9초 | Basic 3 epoch의 실제 실행 시간이다. 약 18.3분이었고, 이 기록을 기준으로 장시간 추가 학습을 계획했다 |
 | checkpoint | `checkpoints/basic_full_final.pt` | 3 epoch 시점 final_val_loss는 6.1680이었다. 이 checkpoint에서 이어 학습한 결과 best_val_loss 4.5587까지 내려갔다 |
+
+Basic 설정과 50 epoch ablation 결과를 비교하면 다음처럼 정리할 수 있다.
+
+| 항목 | Basic 값 | 50 epoch에서 낮았던 값 | 해석 |
+| --- | --- | --- | --- |
+| learning_rate | 3e-4 | 1e-3 | 50 epoch에서는 1e-3이 더 빠르게 loss를 낮췄다 |
+| context_length | 128 | 64 | 짧은 문맥이 loss는 낮았지만, 생성에서 더 긴 문맥을 보기 위해 Basic은 128을 유지했다 |
+| emb_dim | 128 | 256 | 표현 차원을 키우면 best val_loss는 낮아졌지만 epoch 27 이후 다시 상승했다 |
+| n_layers | 2 | 4 | layer 수를 늘리면 loss는 낮아졌고 실행 시간도 함께 늘었다 |
+| batch_size | 32 | 16 | 작은 batch가 더 낮은 validation loss를 보였지만 실행 시간은 더 길었다 |
+| drop_rate | 0.1 | 0.1 | dropout 0.0은 후반 validation loss가 상승해 0.1 유지 근거가 생겼다 |
 
 | epoch | train_loss |
 | ---: | ---: |
@@ -249,22 +278,43 @@ context_size: 128
 max_new_tokens: 80
 temperature: 0.8
 top_k: 40
+seed: 123
 ```
 
 `temperature=0.8`과 `top_k=40`을 사용한 sampling 방식이라 같은 checkpoint에서도 실행할 때마다 문장은 조금 달라질 수 있다.
 
 ```text
 prompt: 영화가
-영화가아버지는 않았던 영화. 어린시절 나에겐 어쩔 수 없을 것 같은데 평점이 낮은가? 그냥 그저그런느낌
-2013년이 지난 지금 봐도 이런걸 영화라고 생각합니다. 그러나 스토리엔 너무 심하게 만들었으면!
-소재가 가장 위대한 미소를 담은 영화.
+영화가 몇번이나 본 영화인데도 이런 영화는 보면서 다시 보니깐 돌고갔네 ㅡ,ㅡ
+김탁 김지커플리 매력있더라요
+마지막 장면을 둘째치고 연기파주의 연주가 매력넘좋았습니다ㅎ
+감동은 최강인은 어떤 궤벨로 상영하는 듯
 ```
 
 ```text
 prompt: 정말
-정말 마음에 듬
-잔잔하고 지루했던, 시대를 다시 한번 생각해본다.
-너무 재미있어요. 다들 정말 감동이었다. 하지만 그때의 감동을 받았다.
+정말정말너무 좋아요!
+배우들의 연기는 좋으나 특별한 것을 보여주는 영화, 내용이 부여 산만하지만 영화보면서도 긴장감도 너무 지루하고, 연기가 연출도 너무 좋았고 스토리 전개도 유치하고 뻔함으로 전개도 아쉬운 부분도 있고 재미 있다는 말밖에 못하지 않을까.
+이건.. 내가 15세 이상은 내 인생은 더
+```
+
+```text
+prompt: 배우가
+배우가 다르겠는데 이건 뭐 이뻐서 1점도아깝네..
+최고에요
+감동적이다.
+이영화는 왜이래?
+아이들이 잘 봤어요!
+너무 재미없는영화도 어이없음
+그냥 쓰레기같은 영화. 한국영화에서 영화관에서 보시라면 더욱 공감되네요..그저그런 비슷하네요... 이영화는 미국식사회에서
+```
+
+```text
+prompt: 스토리는
+스토리는 어쩔 수 없었음.
+그냥 쓰레기통 역할인건 안쓰는데...ㅡㅡ;;;;;
+그리고 이 영화는 정말 OOO기 영화...ㅡㅡ;;;
+그 당신을 위한 영국, 한심한 그것만으로도 충분히 현실성을 주는 것이 아닌 흑백의 정체성이 너무 많아서 좋았어요. 특히 땜에님
 ```
 
 짧은 초기 학습 단계에서는 깨진 byte 조각이 많았지만, 장시간 Basic 학습 후에는 NSMC 리뷰 도메인의 표현인 `평점`, `재미`, `감동`, `지루`, `영화`, `드라마` 등이 문맥 안에서 더 자연스럽게 나타났다.
@@ -277,9 +327,11 @@ prompt: 정말
 
 vocab_size 실험은 tokenization 단위와 cross entropy의 클래스 수가 함께 달라지므로 loss 숫자를 그대로 비교하지 않았다.
 
-개별 그래프는 `figures/ablation50_*.png`로 저장했고, 전체 요약 그래프는 7.1에 포함했다.
+개별 그래프는 각 항목 아래에 함께 배치했다. 그래프는 한눈에 경향을 보기 위한 용도이고, 표는 정확한 수치를 확인하기 위한 용도다.
 
 ### 8.1 Activation
+
+![Activation ablation](figures/ablation50_activation.png)
 
 | activation | final val_loss | best val_loss | best epoch |
 | --- | ---: | ---: | ---: |
@@ -292,6 +344,8 @@ SiLU가 가장 낮았고 GELU가 근소하게 뒤따랐다. Sigmoid는 네 후�
 
 ### 8.2 Dropout
 
+![Dropout ablation](figures/ablation50_dropout.png)
+
 | drop_rate | final val_loss | best val_loss | best epoch |
 | ---: | ---: | ---: | ---: |
 | 0.0 | 5.2908 | 5.0968 | 20 |
@@ -301,6 +355,8 @@ SiLU가 가장 낮았고 GELU가 근소하게 뒤따랐다. Sigmoid는 네 후�
 dropout 0.1이 가장 낮았다. dropout 0.0은 epoch 20에서 best를 찍은 뒤 final loss가 5.2908까지 올라갔다.
 
 ### 8.3 Learning Rate
+
+![Learning rate ablation](figures/ablation50_learning_rate.png)
 
 | learning_rate | final val_loss | best val_loss | best epoch |
 | ---: | ---: | ---: | ---: |
@@ -312,6 +368,8 @@ dropout 0.1이 가장 낮았다. dropout 0.0은 epoch 20에서 best를 찍은 �
 
 ### 8.4 Optimizer와 Weight Decay
 
+![Optimizer and weight decay ablation](figures/ablation50_optimizer_weight_decay.png)
+
 | 설정 | final val_loss | best val_loss | best epoch |
 | --- | ---: | ---: | ---: |
 | AdamW, weight_decay 0.0 | 4.9428 | 4.9428 | 50 |
@@ -321,7 +379,21 @@ dropout 0.1이 가장 낮았다. dropout 0.0은 epoch 20에서 best를 찍은 �
 
 AdamW와 Adam은 거의 같았고, AdamW weight_decay 0.01이 아주 조금 낮았다. SGD는 loss가 거의 내려가지 않았다.
 
-### 8.5 Context Length
+### 8.5 Vocab Size
+
+![Vocab size ablation](figures/ablation50_vocab_size.png)
+
+| vocab_size | final val_loss | best val_loss | best epoch |
+| ---: | ---: | ---: | ---: |
+| 1000 | 3.8539 | 3.8539 | 50 |
+| 2000 | 4.9428 | 4.9428 | 50 |
+| 4000 | 5.8579 | 5.8551 | 46 |
+
+vocab_size는 loss 숫자를 직접 비교하지 않았다. vocab_size가 바뀌면 tokenization 단위와 class 수가 함께 바뀌기 때문에, 같은 validation loss 축 위에서 다른 hyperparameter처럼 해석하면 안 된다.
+
+### 8.6 Context Length
+
+![Context length ablation](figures/ablation50_context_length.png)
 
 | context_length | final val_loss | best val_loss | best epoch |
 | ---: | ---: | ---: | ---: |
@@ -331,7 +403,9 @@ AdamW와 Adam은 거의 같았고, AdamW weight_decay 0.01이 아주 조금 낮�
 
 50 epoch 기준으로는 context_length 64가 가장 낮았다. 이 데이터와 학습 길이에서는 짧은 context가 더 빠르게 loss를 낮췄다.
 
-### 8.6 Embedding Dimension
+### 8.7 Embedding Dimension
+
+![Embedding dimension ablation](figures/ablation50_emb_dim.png)
 
 | emb_dim | final val_loss | best val_loss | best epoch |
 | ---: | ---: | ---: | ---: |
@@ -341,7 +415,9 @@ AdamW와 Adam은 거의 같았고, AdamW weight_decay 0.01이 아주 조금 낮�
 
 emb_dim 256이 가장 낮은 best val_loss를 기록했다. 다만 epoch 27 이후 final loss는 4.8984까지 올라갔다.
 
-### 8.7 Layer 수
+### 8.8 Layer 수
+
+![Layer count ablation](figures/ablation50_n_layers.png)
 
 | n_layers | final val_loss | best val_loss | best epoch |
 | ---: | ---: | ---: | ---: |
@@ -351,7 +427,9 @@ emb_dim 256이 가장 낮은 best val_loss를 기록했다. 다만 epoch 27 이�
 
 layer 수를 늘릴수록 validation loss가 낮아졌다. 4층은 2층보다 낮았지만 실행 시간도 104.0초에서 178.8초로 늘었다.
 
-### 8.8 Attention Head 수
+### 8.9 Attention Head 수
+
+![Attention head count ablation](figures/ablation50_n_heads.png)
 
 | n_heads | final val_loss | best val_loss | best epoch |
 | ---: | ---: | ---: | ---: |
@@ -361,7 +439,9 @@ layer 수를 늘릴수록 validation loss가 낮아졌다. 4층은 2층보다 �
 
 head 수 차이는 크지 않았고, 2 heads가 가장 낮았다.
 
-### 8.9 FFN 확장 비율
+### 8.10 FFN 확장 비율
+
+![FFN multiplier ablation](figures/ablation50_ffn_mult.png)
 
 | FFN mult | final val_loss | best val_loss | best epoch |
 | ---: | ---: | ---: | ---: |
@@ -371,7 +451,9 @@ head 수 차이는 크지 않았고, 2 heads가 가장 낮았다.
 
 FFN mult 8이 가장 낮았지만 mult 4와의 차이는 작았다.
 
-### 8.10 Gradient Clipping
+### 8.11 Gradient Clipping
+
+![Gradient clipping ablation](figures/ablation50_grad_clip.png)
 
 | 설정 | final val_loss | best val_loss | best epoch |
 | --- | ---: | ---: | ---: |
@@ -380,7 +462,9 @@ FFN mult 8이 가장 낮았지만 mult 4와의 차이는 작았다.
 
 현재 설정에서는 gradient clipping 차이가 나타나지 않았다.
 
-### 8.11 Batch Size
+### 8.12 Batch Size
+
+![Batch size ablation](figures/ablation50_batch_size.png)
 
 | batch_size | final val_loss | best val_loss | best epoch |
 | ---: | ---: | ---: | ---: |
@@ -389,6 +473,14 @@ FFN mult 8이 가장 낮았지만 mult 4와의 차이는 작았다.
 | 64 | 4.9883 | 4.9883 | 50 |
 
 batch size 16이 가장 낮았고, 실행 시간은 195.4초로 가장 길었다. batch size 64는 가장 빨랐지만 final val_loss가 가장 높았다.
+
+### 8.13 실험 한계
+
+이번 ablation은 Basic 설정에서 한 번에 하나의 요소만 바꿔 50 epoch씩 비교했다. 이 방식은 어떤 요소가 loss에 영향을 주는지 보기 쉽지만, 좋은 값을 여러 개 조합했을 때도 같은 방향으로 좋아진다는 보장은 없다.
+
+또한 모든 실험은 같은 seed 기준의 단일 실행이다. 따라서 작은 차이는 seed 변화에 따라 달라질 수 있다. 예를 들어 n_heads 2/4/8의 final val_loss 차이는 0.02 안팎이라 큰 결론으로 보기 어렵다. 반면 learning_rate, context_length, dropout 0.0처럼 차이가 크게 난 항목은 해석 근거가 더 강하다.
+
+vocab_size 실험은 별도로 조심해서 봐야 한다. vocab_size가 바뀌면 tokenization 단위와 cross entropy의 class 수가 같이 바뀌므로, loss 숫자만으로 vocab_size 1000이 더 좋다고 결론내릴 수 없다. vocab_size 비교는 생성 품질, token 수, bits-per-byte 같은 지표와 함께 봐야 한다.
 
 ---
 
@@ -404,9 +496,41 @@ batch size 16이 가장 낮았고, 실행 시간은 195.4초로 가장 길었다
 | loss | cross entropy |
 | train/eval | 평균 loss와 accuracy 반환 |
 
-미세조정 모듈은 단위 테스트를 통과했다. 이번 보고서의 장시간 실험은 사전학습 품질과 hyperparameter ablation에 집중했고, 감성 분류 fine-tuning accuracy는 별도로 기록하지 않았다.
+미세조정 모듈은 단위 테스트를 통과했다. 이후 `basic_monitor_best.pt`를 backbone 초기값으로 사용해 NSMC 감성 분류 fine-tuning을 진행했다.
 
-fine-tuning 부분은 분류 학습 파이프라인 구현과 테스트 통과까지 확인했다. 실제 NSMC classification 성능 비교에는 train/validation accuracy 기록을 추가해야 한다.
+fine-tuning 실험 설정은 다음과 같다.
+
+| 항목 | 값 |
+| --- | ---: |
+| pretraining checkpoint | `checkpoints/basic_monitor_best.pt` |
+| pretraining epoch | 1392 |
+| train samples | 30,000 |
+| validation samples | 6,000 |
+| test samples | 6,000 |
+| max_length | 128 |
+| batch_size | 64 |
+| learning_rate | 1e-4 |
+| fine-tuning epoch | 3 |
+| elapsed | 15.8초 |
+
+![Fine-tuning accuracy](figures/finetune_accuracy.png)
+
+| epoch | train_loss | train_acc | val_loss | val_acc |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | - | - | 1.4921 | 0.5005 |
+| 1 | 0.5786 | 0.6996 | 0.4674 | 0.7782 |
+| 2 | 0.4779 | 0.7683 | 0.4469 | 0.7907 |
+| 3 | 0.4502 | 0.7855 | 0.4273 | 0.8003 |
+
+최종 test 결과는 다음과 같다.
+
+| split | loss | accuracy |
+| --- | ---: | ---: |
+| test | 0.4224 | 0.8022 |
+
+처음 classifier head를 붙인 직후 validation accuracy는 0.5005로 거의 무작위 분류 수준이었다. 3 epoch fine-tuning 후 validation accuracy는 0.8003, test accuracy는 0.8022까지 올라갔다. 즉 사전학습된 GPT hidden state 위에 분류 head를 붙이고 supervised loss로 조정하면 NSMC 감성 분류에도 사용할 수 있음을 확인했다.
+
+이 실험은 subset 기준이므로 전체 train/validation/test 데이터 기준 성능과는 다를 수 있다. 전체 데이터 기준으로 측정하려면 노트북 62번째 코드 셀에서 `TRAIN_LIMIT`, `VAL_LIMIT`, `TEST_LIMIT`를 `None`으로 바꾸면 된다.
 
 ---
 
@@ -420,7 +544,7 @@ fine-tuning 부분은 분류 학습 파이프라인 구현과 테스트 통과�
 | GPU | NVIDIA GeForce RTX 5090 |
 | 주요 실행 파일 | `gpt-lab.ipynb` |
 | 주요 checkpoint | `checkpoints/basic_monitor_best.pt` |
-| 주요 실험 로그 | `checkpoints/basic_monitor_history.json`, `checkpoints/ablation50_*.json` |
+| 주요 실험 로그 | `checkpoints/basic_monitor_history.json`, `checkpoints/ablation50_*.json`, `checkpoints/finetune_accuracy_report.json` |
 
 data, vocab, checkpoint, ablation 결과 JSON은 로컬 실험 산출물이며 `.gitignore` 대상이다.
 
@@ -436,7 +560,7 @@ data, vocab, checkpoint, ablation 결과 JSON은 로컬 실험 산출물이며 `
 6. 50 epoch ablation에서 activation은 SiLU 4.9352, GELU 4.9428로 가까웠고, Sigmoid는 4.9773으로 가장 높았다.
 7. learning_rate 1e-3, context_length 64, emb_dim 256, n_layers 4, batch_size 16이 Basic 값보다 낮은 validation loss를 보였다.
 8. dropout 0.1은 세 후보 중 가장 낮았고, dropout 0.0은 epoch 20 이후 validation loss가 다시 증가했다.
-9. fine-tuning은 구현과 테스트까지 완료했고, classification accuracy 기록은 남은 작업으로 두었다.
+9. fine-tuning은 subset 기준 validation accuracy 0.8003, test accuracy 0.8022를 기록했다.
 
 ---
 
@@ -445,5 +569,5 @@ data, vocab, checkpoint, ablation 결과 JSON은 로컬 실험 산출물이며 `
 - vocab_size별 cross entropy는 tokenization 단위가 달라지므로 생성 품질이나 bits-per-byte 같은 추가 지표와 함께 봐야 한다.
 - ablation은 50 epoch 단일 변수 비교이므로, 좋은 값을 조합했을 때도 같은 방향으로 좋아지는지는 추가 검증이 필요하다.
 - Basic 모델은 아직 문법 오류와 반복이 남아 있어 더 큰 모델 또는 더 긴 학습을 시도할 수 있다.
-- fine-tuning은 구현과 테스트는 완료했고, sentiment classification accuracy 기록을 추가해야 한다.
+- fine-tuning은 subset 기준으로만 측정했으므로, 전체 데이터 기준 accuracy를 추가로 확인할 수 있다.
 - 다음 실험에서는 `learning_rate=1e-3`, `context_length=64`, `emb_dim=256`, `n_layers=4`, `batch_size=16`을 단계적으로 조합해 검증하는 것이 좋다.
