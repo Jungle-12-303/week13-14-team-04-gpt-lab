@@ -254,15 +254,15 @@ class BPETokenizer:
         return result_word.decode("utf-8")
         # raise NotImplementedError("BPETokenizer.decode를 구현하세요.")
         
-    def decode_token(self, token_id: int, skip_special:bool) -> bytes:
+    def decode_token(self, token_id: int, skip_special: bool) -> bytes:
         token = self.id_to_token[token_id]
-        
+
         if isinstance(token, bytes):
             return token
 
         if isinstance(token, tuple):
             left, right = token
-            return self.decode_token(left,skip_special) + self.decode_token(right,skip_special)
+            return self.decode_token(left, skip_special) + self.decode_token(right, skip_special)
 
         if isinstance(token, str):
             if skip_special:
