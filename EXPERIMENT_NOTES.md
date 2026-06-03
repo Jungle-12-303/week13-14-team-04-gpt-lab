@@ -491,31 +491,534 @@ optimizer = AdamW
 weight_decay = 0.06
 ```
 
-## 다음 실험 기록 템플릿
+## Context length가 하는 일
 
-아래부터는 다른 하이퍼파라미터를 바꿔가며 같은 방식으로 기록한다.
+`context_length`는 모델이 한 번에 보는 토큰 길이다. GPT는 현재 토큰을 예측할 때 앞에 있는 토큰들을 참고하는데, 이때 최대 몇 개의 이전 토큰을 볼 수 있는지가 context length다.
 
-### Context length
+예를 들어 `context_length=80`이면 모델은 한 학습 샘플에서 최대 80개 토큰 길이의 입력을 보고 다음 토큰을 예측한다. `context_length=128`이면 더 긴 문맥을 볼 수 있지만, 한 샘플이 길어지고 attention 계산도 커진다.
+
+값이 작으면 한 번에 보는 문맥은 짧아진다.
+
+```text
+context_length = 32
+짧은 문맥만 보지만 학습 문제는 상대적으로 쉬워질 수 있음
+```
+
+값이 적당하면 현재 데이터의 문장 길이와 모델 크기에 맞는 문맥을 제공할 수 있다.
+
+```text
+context_length = 80 근처
+현재 오버라이드 적용 실험에서는 이 구간이 가장 좋았음
+```
+
+값이 너무 크면 긴 문맥을 볼 수는 있지만, 현재 작은 모델과 50 epoch 설정에서는 오히려 학습이 어려워질 수 있다.
+
+```text
+context_length = 128, 256
+긴 문맥을 제공하지만 현재 실험에서는 validation loss가 더 높을 수 있음
+```
+
+따라서 context length는 "모델이 한 번에 참고하는 문맥의 길이"를 정하는 값이다. 작은 값은 짧은 패턴을 더 쉽게 학습하게 만들 수 있고, 큰 값은 긴 문맥을 다룰 수 있게 하지만 계산량과 학습 난이도를 함께 올린다.
+
+## Context length 실험 결과
+
+이번 실험은 앞에서 찾은 현재 최적 후보를 기준으로 진행했다.
+
+```text
+drop_rate = 0.14
+learning_rate = 5e-3
+optimizer = AdamW
+weight_decay = 0.06
+```
+
+기본 `BASE_CONFIG_50` 자체는 바꾸지 않고, context length 실험을 실행할 때만 위 값을 `base_overrides`로 적용했다.
 
 실험 전 가설:
 
-- 작성 예정
+- context length가 너무 짧으면 긴 문맥을 활용하지 못해 validation loss가 나빠질 수 있다.
+- context length가 너무 길면 현재 작은 모델이 긴 문맥을 충분히 활용하지 못하고 학습이 어려워질 수 있다.
+- 짧은 영화 리뷰 데이터와 작은 GPT 설정에서는 긴 context보다 짧거나 중간 길이 context가 더 좋은 loss를 낼 수 있다.
+- context length 탐색을 빠르게 하기 위해 처음에는 `epochs=20`으로 후보를 좁히고, 가장 좋아 보이는 후보를 마지막에 `epochs=50`으로 재확인한다.
 
-비교 후보:
+### 넓은 범위 확인
 
-| label | context_length | final train loss | final val loss | best val loss | 메모 |
-|---|---:|---:|---:|---:|---|
-|  |  |  |  |  |  |
+처음에는 `32`, `64`, `128`을 `epochs=20`으로 비교했다. 이 결과에서는 `64`가 가장 낮은 validation loss를 보였다.
 
-figure:
+![context length 32 64 128](figures/ablation50/ablation50_context_length_20260603_200105_129.png)
 
-```markdown
-![context length](figures/ablation50/파일명.png)
+결과 파일:
+
+- `checkpoints/ablation50/ablation50_context_length_20260603_200105_129.json`
+- `figures/ablation50/ablation50_context_length_20260603_200105_129.png`
+
+| label | context_length | final train loss | final val loss | best val loss | elapsed | 메모 |
+|---|---:|---:|---:|---:|---:|---|
+| ctx_32 | 32 | 4.7139 | 4.6921 | 4.6921 | 2.6분 | 짧은 후보 |
+| ctx_64 | 64 | 4.5998 | 4.6208 | 4.6208 | 1.3분 | 세 후보 중 가장 좋음 |
+| ctx_128 | 128 | 4.5933 | 4.6655 | 4.6655 | 0.7분 | `64`보다 나쁨 |
+
+해석:
+
+- `64`가 `32`, `128`보다 낮은 validation loss를 보였다.
+- 오버라이드 적용 전 실험과 달리, 이전 best 조합을 적용한 상태에서는 너무 짧은 `32`보다 `64`가 더 좋았다.
+- 따라서 다음에는 `64` 주변을 더 세밀하게 확인하기로 했다.
+
+### 64 주변 세밀 비교
+
+`64`가 가장 좋았기 때문에 주변 값인 `48`, `64`, `80`을 `epochs=20`으로 비교했다. 이 실험에서는 `80`이 가장 낮은 validation loss를 보였다.
+
+![context length 48 64 80](figures/ablation50/ablation50_context_length_20260603_200728_959.png)
+
+결과 파일:
+
+- `checkpoints/ablation50/ablation50_context_length_20260603_200728_959.json`
+- `figures/ablation50/ablation50_context_length_20260603_200728_959.png`
+
+| label | context_length | final train loss | final val loss | best val loss | elapsed | 메모 |
+|---|---:|---:|---:|---:|---:|---|
+| ctx_48 | 48 | 4.6461 | 4.6541 | 4.6488 | 1.8분 | `64`보다 나쁨 |
+| ctx_64 | 64 | 4.5998 | 4.6208 | 4.6208 | 1.4분 | 이전 best 후보 |
+| ctx_80 | 80 | 4.5862 | 4.6119 | 4.6119 | 1.1분 | 가장 좋은 후보 |
+
+해석:
+
+- `48`은 `64`보다 나빠서 너무 짧은 쪽은 아닌 것으로 보인다.
+- `80`이 `64`보다 더 낮은 validation loss를 보여서 좋은 지점이 `64`보다 약간 긴 쪽으로 이동했다.
+- 따라서 `80` 위쪽도 확인할 필요가 생겼다.
+
+### 80 위쪽 확인
+
+`80`이 가장 좋았기 때문에 그보다 긴 `96`, `112`를 함께 비교했다. 이 결과에서도 `80`이 가장 좋았다.
+
+![context length 80 96 112](figures/ablation50/ablation50_context_length_20260603_201332_019.png)
+
+결과 파일:
+
+- `checkpoints/ablation50/ablation50_context_length_20260603_201332_019.json`
+- `figures/ablation50/ablation50_context_length_20260603_201332_019.png`
+
+| label | context_length | final train loss | final val loss | best val loss | elapsed | 메모 |
+|---|---:|---:|---:|---:|---:|---|
+| ctx_80 | 80 | 4.5862 | 4.6119 | 4.6119 | 1.1분 | 가장 좋은 후보 유지 |
+| ctx_96 | 96 | 4.5885 | 4.6324 | 4.6324 | 0.9분 | `80`보다 나쁨 |
+| ctx_112 | 112 | 4.5914 | 4.6663 | 4.6539 | 0.8분 | 더 나쁨 |
+
+해석:
+
+- `80`보다 더 긴 `96`, `112`는 validation loss가 높아졌다.
+- 현재 후보군에서는 `80` 근처가 가장 좋은 지점으로 보인다.
+- 빠른 탐색은 `epochs=20`으로 진행했기 때문에, 마지막에는 `epochs=50`으로 다시 확인해야 한다.
+
+### 50 epoch 재확인
+
+빠른 탐색에서 `80`이 가장 좋아 보였으므로, 마지막으로 `64`, `80`, `96`을 `epochs=50`으로 다시 학습했다. 50 epoch에서도 `80`이 가장 낮은 validation loss를 보였다.
+
+![context length 64 80 96 50 epoch](figures/ablation50/ablation50_context_length_20260603_201721_327.png)
+
+결과 파일:
+
+- `checkpoints/ablation50/ablation50_context_length_20260603_201721_327.json`
+- `figures/ablation50/ablation50_context_length_20260603_201721_327.png`
+
+| label | context_length | final train loss | final val loss | best val loss | elapsed | 메모 |
+|---|---:|---:|---:|---:|---:|---|
+| ctx_64 | 64 | 4.5050 | 4.5360 | 4.5307 | 3.4분 | `80`보다 나쁨 |
+| ctx_80 | 80 | 4.4730 | 4.5218 | 4.5218 | 2.7분 | 50 epoch에서도 가장 좋음 |
+| ctx_96 | 96 | 4.4554 | 4.5325 | 4.5320 | 2.3분 | train loss는 낮지만 val loss는 `80`보다 높음 |
+
+해석:
+
+- `ctx_80`이 final val loss 기준으로 가장 좋다.
+- `ctx_96`은 train loss가 가장 낮지만 validation loss는 `80`보다 높다. 더 긴 context가 train 데이터에는 더 맞춰질 수 있지만 validation 성능은 더 좋아지지 않았다.
+- `epochs=20`에서 찾은 후보가 `epochs=50`에서도 유지되었으므로, `context_length=80`을 현재 best로 기록한다.
+
+## Context length 현재 결론
+
+현재 최적 후보 조합에서 context length만 바꿔 본 결과, 가장 좋은 값은 `context_length=80`이다.
+
+```text
+best so far:
+drop_rate = 0.14
+learning_rate = 5e-3
+optimizer = AdamW
+weight_decay = 0.06
+context_length = 80
+
+final train loss = 4.4730
+final val loss = 4.5218
+best val loss = 4.5218
 ```
 
-결론:
+이번 실험은 이전 best 값을 모두 오버라이드한 상태에서 진행했다. 처음에는 시간을 줄이기 위해 `epochs=20`으로 `32 / 64 / 128`, `48 / 64 / 80`, `80 / 96 / 112`를 빠르게 비교했고, 여기서 `80`이 가장 좋아 보였다. 마지막으로 `epochs=50`에서 `64 / 80 / 96`을 다시 돌렸을 때도 `80`이 가장 낮은 validation loss를 보였다.
 
-- 작성 예정
+```text
+confirmed best: context_length = 80
+confirmed with epochs = 50
+```
+
+앞으로는 다음 하이퍼파라미터 실험을 `context_length=80` 기준으로 진행한다. 빠른 후보 탐색이 필요할 때는 epoch를 줄이고, 최종 후보는 다시 50 epoch로 확인하는 방식이 좋다.
+
+## Vocab size가 하는 일
+
+`vocab_size`는 tokenizer가 사용할 수 있는 토큰 종류의 개수다. 이 값은 모델의 입력 토큰화 방식과 embedding/output layer 크기에 직접 영향을 준다.
+
+이번 프로젝트의 tokenizer는 UTF-8 byte-level BPE다. 그래서 특수 토큰 4개와 byte 토큰 256개가 기본으로 필요하다.
+
+```text
+minimum vocab_size = 4 + 256 = 260
+```
+
+따라서 `vocab_size=100`처럼 260보다 작은 값은 사용할 수 없다. 이런 값을 쓰면 tokenizer는 100 이상의 byte token ID를 만들 수 있는데, 모델 embedding 크기는 100밖에 없어서 CUDA device-side assert 같은 오류가 날 수 있다.
+
+값이 작으면 문장이 더 잘게 쪼개진다.
+
+```text
+vocab_size = 300
+기본 byte token에 가까운 작은 vocabulary
+```
+
+값이 적당하면 자주 나오는 byte pair나 subword를 조금 더 큰 단위로 묶을 수 있다.
+
+```text
+vocab_size = 500 ~ 1000
+더 많은 merge token을 사용함
+```
+
+값이 너무 크면 tokenizer는 더 많은 표현을 토큰 하나로 만들 수 있지만, 데이터가 작으면 각 토큰이 충분히 자주 학습되지 않을 수 있다. 또한 vocab size가 커지면 token embedding과 output layer도 커진다.
+
+```text
+vocab_size = 2000, 4000
+표현력은 커지지만 현재 데이터/모델에서는 loss가 더 높았음
+```
+
+주의할 점은 vocab size를 바꾸면 tokenizer 자체가 바뀐다는 것이다. 같은 문장도 토큰 개수와 토큰 단위가 달라지므로 loss 숫자를 다른 하이퍼파라미터처럼 완전히 동일한 기준으로만 보기는 어렵다. 그래도 같은 데이터, 같은 학습 조건에서 validation loss와 그래프를 함께 보면 현재 설정에서 어떤 vocab size가 더 잘 맞는지 판단할 수 있다.
+
+## Vocab size 실험 결과
+
+이번 실험은 앞에서 찾은 현재 최적 후보를 기준으로 진행했다.
+
+```text
+drop_rate = 0.14
+learning_rate = 5e-3
+optimizer = AdamW
+weight_decay = 0.06
+context_length = 80
+```
+
+기본 `BASE_CONFIG_50` 자체는 바꾸지 않고, vocab size 실험을 실행할 때만 위 값을 `base_overrides`로 적용했다.
+
+실험 전 가설:
+
+- vocab size가 너무 작으면 문장이 너무 잘게 쪼개져 한 context 안에 담기는 실제 의미 범위가 줄어들 수 있다.
+- vocab size가 너무 크면 현재 데이터에서 각 토큰을 충분히 학습하기 어려워 validation loss가 나빠질 수 있다.
+- 이 데이터와 작은 GPT 설정에서는 너무 큰 vocab보다 작은 vocab이 더 안정적일 수 있다.
+- vocab size는 tokenizer를 바꾸는 실험이므로, loss 숫자와 함께 토큰화 단위가 달라진다는 점을 같이 고려한다.
+
+### 넓은 범위 확인
+
+처음에는 `1000`, `2000`, `3000`을 `epochs=20`으로 비교했다. 이 실험에서 가장 작은 `1000`이 가장 낮은 validation loss를 보였다.
+
+![vocab size 1000 2000 3000](figures/ablation50/ablation50_vocab_size_20260603_203214_066.png)
+
+결과 파일:
+
+- `checkpoints/ablation50/ablation50_vocab_size_20260603_203214_066.json`
+- `figures/ablation50/ablation50_vocab_size_20260603_203214_066.png`
+
+| label | vocab_size | final train loss | final val loss | best val loss | elapsed | 메모 |
+|---|---:|---:|---:|---:|---:|---|
+| vocab_1000 | 1000 | 3.7666 | 3.6917 | 3.6917 | 1.3분 | 가장 좋음 |
+| vocab_2000 | 2000 | 4.5862 | 4.6119 | 4.6119 | 1.0분 | 기본값보다 큰 loss |
+| vocab_3000 | 3000 | 4.9801 | 5.1647 | 5.1647 | 0.9분 | 가장 나쁨 |
+
+해석:
+
+- vocab size가 커질수록 validation loss가 높아졌다.
+- 현재 설정에서는 큰 vocab보다 작은 vocab이 더 좋아 보인다.
+- 따라서 `1000`보다 더 작은 vocab size를 확인할 필요가 생겼다.
+
+### 작은 vocab size 확인
+
+다음으로 `500`, `1000`, `1500`을 비교했다. 이 결과에서는 `500`이 가장 좋았다.
+
+![vocab size 500 1000 1500](figures/ablation50/ablation50_vocab_size_20260603_205900_314.png)
+
+결과 파일:
+
+- `checkpoints/ablation50/ablation50_vocab_size_20260603_205900_314.json`
+- `figures/ablation50/ablation50_vocab_size_20260603_205900_314.png`
+
+| label | vocab_size | final train loss | final val loss | best val loss | elapsed | 메모 |
+|---|---:|---:|---:|---:|---:|---|
+| vocab_500 | 500 | 2.8997 | 2.7967 | 2.7967 | 1.8분 | 가장 좋음 |
+| vocab_1000 | 1000 | 3.7666 | 3.6917 | 3.6917 | 1.3분 | `500`보다 나쁨 |
+| vocab_1500 | 1500 | 4.2690 | 4.2506 | 4.2506 | 1.1분 | 더 나쁨 |
+
+해석:
+
+- `500`이 `1000`, `1500`보다 훨씬 낮은 validation loss를 보였다.
+- 좋은 방향이 더 작은 vocab size 쪽으로 계속 이동했다.
+- byte-level BPE의 최소 가능 값이 260이므로, 그 근처인 `300`대 vocab을 확인하기로 했다.
+
+### 300 근처 확인
+
+`300`, `400`, `500`을 비교했을 때 `300`이 가장 좋았다.
+
+![vocab size 300 400 500](figures/ablation50/ablation50_vocab_size_20260603_211455_968.png)
+
+결과 파일:
+
+- `checkpoints/ablation50/ablation50_vocab_size_20260603_211455_968.json`
+- `figures/ablation50/ablation50_vocab_size_20260603_211455_968.png`
+
+| label | vocab_size | final train loss | final val loss | best val loss | elapsed | 메모 |
+|---|---:|---:|---:|---:|---:|---|
+| vocab_300 | 300 | 2.0140 | 1.9288 | 1.9274 | 2.7분 | 가장 좋음 |
+| vocab_400 | 400 | 2.5824 | 2.4838 | 2.4838 | 2.0분 | `300`보다 나쁨 |
+| vocab_500 | 500 | 2.8997 | 2.7967 | 2.7967 | 1.8분 | 더 나쁨 |
+
+해석:
+
+- `300`이 `400`, `500`보다 validation loss가 낮았다.
+- 최소 가능 vocab size인 260에 가까운 작은 vocabulary가 현재 데이터와 모델에 잘 맞는 것으로 보인다.
+- 더 세밀하게 `300` 바로 위쪽을 확인할 필요가 있다.
+
+### 300 주변 재확인
+
+`300`, `305`, `310`을 `epochs=50`으로 다시 비교했다. 50 epoch에서도 `300`이 가장 낮은 validation loss를 보였다.
+
+![vocab size 300 305 310 50 epoch](figures/ablation50/ablation50_vocab_size_20260603_220128_985.png)
+
+결과 파일:
+
+- `checkpoints/ablation50/ablation50_vocab_size_20260603_220128_985.json`
+- `figures/ablation50/ablation50_vocab_size_20260603_220128_985.png`
+
+| label | vocab_size | final train loss | final val loss | best val loss | best epoch | elapsed | 메모 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| vocab_300 | 300 | 1.9807 | 1.9004 | 1.8933 | 49 | 7.1분 | 50 epoch에서도 가장 좋음 |
+| vocab_305 | 305 | 2.0195 | 1.9476 | 1.9395 | 46 | 6.8분 | `300`보다 나쁨 |
+| vocab_310 | 310 | 2.0615 | 1.9780 | 1.9776 | 43 | 6.6분 | 더 나쁨 |
+
+해석:
+
+- `300`이 final val loss와 best val loss 모두 가장 낮다.
+- `305`, `310`처럼 조금만 늘려도 validation loss가 올라갔다.
+- 따라서 현재 실험에서는 최소 vocabulary에 가까운 `300`이 가장 좋은 후보로 보인다.
+
+## Vocab size 현재 결론
+
+현재 최적 후보 조합에서 vocab size만 바꿔 본 결과, 가장 좋은 값은 `vocab_size=300`이다.
+
+```text
+best so far:
+drop_rate = 0.14
+learning_rate = 5e-3
+optimizer = AdamW
+weight_decay = 0.06
+context_length = 80
+vocab_size = 300
+
+final train loss = 1.9807
+final val loss = 1.9004
+best val loss = 1.8933
+```
+
+다만 vocab size 실험은 tokenizer 자체가 바뀌므로, loss scale이 다른 실험보다 크게 달라질 수 있다. `vocab_size=300`은 현재 validation loss 기준으로 가장 좋지만, 최종 보고에서는 "현재 데이터와 tokenizer 조건에서 가장 낮은 loss를 보인 값"으로 해석한다.
+
+앞으로는 다음 하이퍼파라미터 실험을 `vocab_size=300` 기준으로 진행한다.
+
+```text
+drop_rate = 0.14
+learning_rate = 5e-3
+optimizer = AdamW
+weight_decay = 0.06
+context_length = 80
+vocab_size = 300
+```
+
+## Embedding dimension이 하는 일
+
+`emb_dim`은 각 토큰을 몇 차원의 벡터로 표현할지 정하는 값이다. tokenizer가 문장을 token ID로 바꾸면, 모델은 그 ID를 바로 계산하는 것이 아니라 embedding table에서 벡터로 바꿔서 사용한다.
+
+```text
+token id -> embedding vector
+```
+
+예를 들어 `emb_dim=128`이면 토큰 하나가 128차원 벡터로 표현되고, `emb_dim=320`이면 토큰 하나가 320차원 벡터로 표현된다. 이 값은 token embedding뿐 아니라 transformer block 내부의 hidden size에도 연결되므로, 모델의 표현력과 파라미터 수에 직접 영향을 준다.
+
+값이 작으면 모델이 가볍고 빠르지만 표현력이 부족할 수 있다.
+
+```text
+emb_dim = 64, 128
+계산은 가볍지만 현재 실험에서는 validation loss가 더 높았음
+```
+
+값이 적당히 커지면 토큰과 문맥 정보를 더 풍부하게 표현할 수 있다.
+
+```text
+emb_dim = 256, 320
+현재 설정에서는 loss가 더 낮아지는 방향을 보였음
+```
+
+하지만 값이 너무 커지면 파라미터 수가 늘고, 데이터가 충분하지 않을 때는 과적합이나 불안정한 학습으로 이어질 수 있다. 학습 시간과 메모리 사용량도 함께 증가한다.
+
+```text
+emb_dim이 커질수록
+표현력 증가 + 계산량 증가 + 과적합 가능성 증가
+```
+
+따라서 embedding dimension 실험은 "현재 데이터와 모델 크기에서 어느 정도의 표현력이 필요한가"를 찾는 과정이다. loss만 보는 것이 아니라 그래프가 안정적으로 내려가는지, 학습 시간이 너무 커지지 않는지도 함께 봐야 한다.
+
+## Embedding dimension 실험 결과
+
+이번 실험은 앞에서 찾은 현재 최적 후보를 기준으로 진행했다.
+
+```text
+drop_rate = 0.14
+learning_rate = 5e-3
+optimizer = AdamW
+weight_decay = 0.06
+context_length = 80
+vocab_size = 300
+```
+
+기본 `BASE_CONFIG_50` 자체는 바꾸지 않고, embedding dimension 실험을 실행할 때만 위 값을 `base_overrides`로 적용했다.
+
+실험 전 가설:
+
+- `emb_dim`이 너무 작으면 토큰과 문맥을 표현할 공간이 부족해서 validation loss가 높을 수 있다.
+- `emb_dim`을 키우면 모델 표현력이 좋아져 loss가 내려갈 수 있다.
+- 다만 너무 큰 `emb_dim`은 파라미터 수와 계산량을 늘리고, 작은 데이터에서는 과적합이나 불안정한 그래프를 만들 수 있다.
+- 따라서 처음에는 넓은 범위로 확인하고, 좋아 보이는 값 주변을 좁혀서 다시 비교한다.
+
+### 넓은 범위 확인
+
+처음에는 `64`, `128`, `256`을 `epochs=20`으로 비교했다. 이 실험에서는 `256`이 가장 낮은 validation loss를 보였다.
+
+![embedding dimension 64 128 256](figures/ablation50/ablation50_emb_dim_20260603_222601_515.png)
+
+결과 파일:
+
+- `checkpoints/ablation50/ablation50_emb_dim_20260603_222601_515.json`
+- `figures/ablation50/ablation50_emb_dim_20260603_222601_515.png`
+
+| label | emb_dim | final train loss | final val loss | best val loss | elapsed | 메모 |
+|---|---:|---:|---:|---:|---:|---|
+| emb_64 | 64 | 2.2084 | 2.0928 | 2.0894 | 3.2분 | 가장 작은 모델, loss가 가장 높음 |
+| emb_128 | 128 | 2.0140 | 1.9288 | 1.9274 | 2.7분 | `64`보다 좋아짐 |
+| emb_256 | 256 | 1.8955 | 1.8411 | 1.8319 | 3.3분 | 세 후보 중 가장 좋음 |
+
+해석:
+
+- `emb_dim`을 키울수록 validation loss가 내려갔다.
+- `256`이 가장 좋았기 때문에, 아직 더 큰 값에서 좋아질 가능성이 남아 있었다.
+- 다음에는 `256`보다 조금 작은 값과 더 큰 값을 함께 비교했다.
+
+### 256 위쪽 확인
+
+다음으로 `224`, `256`, `320`을 비교했다. 이 결과에서는 `320`이 가장 좋았다.
+
+![embedding dimension 224 256 320](figures/ablation50/ablation50_emb_dim_20260603_223915_339.png)
+
+결과 파일:
+
+- `checkpoints/ablation50/ablation50_emb_dim_20260603_223915_339.json`
+- `figures/ablation50/ablation50_emb_dim_20260603_223915_339.png`
+
+| label | emb_dim | final train loss | final val loss | best val loss | elapsed | 메모 |
+|---|---:|---:|---:|---:|---:|---|
+| emb_224 | 224 | 1.9065 | 1.8475 | 1.8452 | 3.1분 | `256`보다 약간 나쁨 |
+| emb_256 | 256 | 1.8955 | 1.8411 | 1.8319 | 3.3분 | 이전 best 후보 |
+| emb_320 | 320 | 1.8617 | 1.8215 | 1.8146 | 4.1분 | 가장 좋음 |
+
+해석:
+
+- `320`이 `224`, `256`보다 낮은 validation loss를 보였다.
+- `emb_dim`을 256에서 320으로 키우는 것이 현재 모델에는 도움이 되었다.
+- 다만 학습 시간이 늘어났기 때문에, 320 주변에서 더 세밀하게 확인할 필요가 있었다.
+
+### 320 주변 확인
+
+`320`이 좋아 보였기 때문에 `312`, `320`, `328`을 `epochs=20`으로 비교했다. 320 주변에서도 `320`이 가장 낮은 validation loss를 보였다.
+
+![embedding dimension 312 320 328](figures/ablation50/ablation50_emb_dim_20260603_225112_582.png)
+
+결과 파일:
+
+- `checkpoints/ablation50/ablation50_emb_dim_20260603_225112_582.json`
+- `figures/ablation50/ablation50_emb_dim_20260603_225112_582.png`
+
+| label | emb_dim | final train loss | final val loss | best val loss | elapsed | 메모 |
+|---|---:|---:|---:|---:|---:|---|
+| emb_312 | 312 | 1.8706 | 1.8296 | 1.8246 | 4.1분 | `320`보다 나쁨 |
+| emb_320 | 320 | 1.8617 | 1.8215 | 1.8146 | 4.1분 | 가장 좋음 |
+| emb_328 | 328 | 1.8713 | 1.8265 | 1.8265 | 4.3분 | `320`보다 나쁨 |
+
+해석:
+
+- `312`, `328`보다 `320`이 더 좋았다.
+- 단순히 embedding dimension을 더 키우는 것이 항상 좋은 것은 아니고, 현재는 `320` 근처에 좋은 지점이 있는 것으로 보인다.
+- 20 epoch 결과만으로 끝내지 않고 마지막에는 50 epoch로 다시 확인했다.
+
+### 50 epoch 재확인
+
+마지막으로 320 주변 후보를 `epochs=50`으로 다시 비교했다. 저장된 JSON의 일부 label은 이전 이름처럼 남아 있지만, 아래 표는 실제 저장된 `config.emb_dim` 기준으로 정리했다.
+
+![embedding dimension 312 320 328 50 epoch](figures/ablation50/ablation50_emb_dim_20260603_230558_068.png)
+
+결과 파일:
+
+- `checkpoints/ablation50/ablation50_emb_dim_20260603_230558_068.json`
+- `figures/ablation50/ablation50_emb_dim_20260603_230558_068.png`
+
+| stored label | actual emb_dim | final train loss | final val loss | best val loss | elapsed | 메모 |
+|---|---:|---:|---:|---:|---:|---|
+| emb_224 | 312 | 1.8316 | 1.7992 | 1.7930 | 10.3분 | label은 224지만 config 기준 312 |
+| emb_320 | 320 | 1.8273 | 1.7905 | 1.7905 | 11.3분 | final val loss 기준 가장 좋음 |
+| emb_256 | 328 | 1.8309 | 1.7997 | 1.7933 | 11.5분 | label은 256이지만 config 기준 328 |
+
+해석:
+
+- 50 epoch에서도 `emb_dim=320`이 final validation loss 기준으로 가장 좋았다.
+- `312`, `328`도 best val loss는 비슷하지만, 마지막 epoch 기준 validation loss는 `320`이 가장 낮고 그래프도 비교적 안정적으로 내려갔다.
+- 중간중간 validation loss가 조금 튀는 구간은 있지만, 전체 추세는 계속 내려가며 `320`이 가장 안정적인 후보로 보인다.
+- `emb_dim=320`은 `256`보다 표현력이 좋아졌지만, 학습 시간은 더 길어졌다. 현재는 loss 개선을 우선해서 `320`을 best로 기록한다.
+
+## Embedding dimension 현재 결론
+
+현재 최적 후보 조합에서 embedding dimension만 바꿔 본 결과, 가장 좋은 값은 `emb_dim=320`이다.
+
+```text
+best so far:
+drop_rate = 0.14
+learning_rate = 5e-3
+optimizer = AdamW
+weight_decay = 0.06
+context_length = 80
+vocab_size = 300
+emb_dim = 320
+
+final train loss = 1.8273
+final val loss = 1.7905
+best val loss = 1.7905
+```
+
+앞으로는 다음 하이퍼파라미터 실험을 `emb_dim=320` 기준으로 진행한다. 다만 `emb_dim`은 모델 크기와 학습 시간을 직접 키우는 값이므로, 이후 실험에서도 loss 개선 폭과 실행 시간을 함께 기록하는 것이 좋다.
+
+```text
+drop_rate = 0.14
+learning_rate = 5e-3
+optimizer = AdamW
+weight_decay = 0.06
+context_length = 80
+vocab_size = 300
+emb_dim = 320
+```
+
+## 다음 실험 기록 템플릿
+
+아래부터는 다른 하이퍼파라미터를 바꿔가며 같은 방식으로 기록한다.
 
 ### Batch size
 
