@@ -1,4 +1,4 @@
-# mini GPT 구현 및 실험 보고서
+# Mini GPT 구현 및 실험 보고서
 
 ## 0. 팀 정보
 
@@ -14,7 +14,7 @@
 
 ## 1. 프로젝트 요약
 
-이 프로젝트는 외부 pretrained model이나 pretrained tokenizer를 사용하지 않고, byte-level BPE tokenizer부터 GPT 계열 언어 모델, 사전학습 루프, 감성 분류 미세조정용 모듈까지 직접 구현하는 것을 목표로 했다.
+이 프로젝트는 외부 pretrained model이나 pretrained tokenizer를 사용하지 않고, byte-level BPE tokenizer부터 GPT 계열 언어 모델, 사전학습 루프, 감성 분류 미세조정 모듈까지 직접 구현하는 것을 목표로 했다.
 
 구현은 과제에서 제시된 순서대로 진행했다.
 
@@ -30,10 +30,10 @@
 
 | 항목 | 결과 |
 | --- | --- |
-| 구현 | tokenizer, dataset, embedding, attention, model, train, finetune 모듈 구현 완료 |
+| 구현 | tokenizer, dataset, embedding, attention, model, train, finetune 모듈 구현 |
 | 테스트 | `pytest tests -v` 기준 전체 테스트 통과 |
 | 사전학습 | Basic 모델 validation loss가 6.1680에서 4.5587까지 감소 |
-| 수렴성 | 100 epoch 구간 평균 기준, 후반부 validation loss 개선 폭이 0.002 안팎으로 축소 |
+| 수렴성 | 후반부 100 epoch 구간 평균 기준 validation loss 개선 폭이 0.002 안팎으로 축소 |
 | ablation | 50 epoch 비교 실험에서 learning_rate 1e-3, context_length 64, emb_dim 256, n_layers 4, batch_size 16이 낮은 validation loss를 보임 |
 | activation 분석 | sigmoid는 FFN `dL/dW`가 작게 몰렸고, ReLU는 output과 derivative가 0인 구간이 크게 나타남 |
 | fine-tuning | subset 기준 NSMC validation accuracy 0.8003, test accuracy 0.8022 |
@@ -161,7 +161,7 @@ Basic 모델의 전체 parameter 수는 924,416개다. 모듈별로 나누면 em
 
 ### 7.1 Basic full 실험
 
-Basic 실험은 최적 hyperparameter를 찾기 위한 최종 모델이 아니라, 과제 구현이 실제 학습으로 이어지는지 확인하고 이후 비교 실험의 출발점으로 삼기 위한 기준 실험이다. 학습을 완료한 뒤에는 50 epoch ablation 결과와 실제 로그를 함께 보며 설정별 차이를 정리했다. 아래 표에서 `train tokens`, `validation tokens`, `train batches`, `validation batches`, `소요 시간`은 직접 고른 hyperparameter가 아니라 선택한 데이터와 설정에서 나온 결과값이다.
+Basic 실험은 과제 구현이 실제 학습으로 이어지는지 확인하고, 이후 비교 실험의 출발점으로 삼기 위한 기준 실험이다. 학습을 완료한 뒤에는 50 epoch ablation 결과와 실제 로그를 함께 보며 설정별 차이를 정리했다. 아래 표에서 `train tokens`, `validation tokens`, `train batches`, `validation batches`, `소요 시간`은 직접 고른 hyperparameter가 아니라 선택한 데이터와 설정에서 나온 결과값이다.
 
 | 항목 | 값 | 수치 근거 |
 | --- | --- | --- |
@@ -184,7 +184,7 @@ Basic 실험은 최적 hyperparameter를 찾기 위한 최종 모델이 아니�
 | 소요 시간 | 1097.9초 | Basic 3 epoch의 실제 실행 시간이다. 약 18.3분이었고, 이 기록을 기준으로 장시간 추가 학습을 계획했다 |
 | checkpoint | `checkpoints/basic_full_final.pt` | 3 epoch 시점 final_val_loss는 6.1680이었다. 이 checkpoint에서 이어 학습한 결과 best_val_loss 4.5587까지 내려갔다 |
 
-Basic 설정과 50 epoch ablation 결과를 비교하면 다음처럼 정리할 수 있다. 여기서 Basic 값은 최적값이라는 뜻이 아니라, 장시간 학습과 비교 실험의 기준값이다.
+Basic 설정과 50 epoch ablation 결과를 비교하면 다음처럼 정리할 수 있다. 여기서 Basic 값은 장시간 학습과 비교 실험의 기준값이다.
 
 | 항목 | Basic 값 | 50 epoch에서 낮았던 값 | 해석 |
 | --- | --- | --- | --- |
@@ -219,7 +219,7 @@ Basic full 모델은 3 epoch 학습 후에도 validation loss가 계속 내려�
 
 초기 full 학습 3 epoch에서는 final validation loss가 6.1680이었다. 이후 같은 설정으로 이어 학습을 진행했고, 최종적으로 epoch 1392에서 validation loss 4.5587까지 감소했다. 학습이 진행될수록 생성 샘플도 깨진 byte 조각이 줄고 NSMC 리뷰 도메인의 표현을 더 많이 포함했다.
 
-최종 저장 시점의 train loss는 3.9407, validation loss는 4.5587이었다. 두 loss 사이에 차이가 있어 모델이 학습 데이터에 더 잘 맞춰진 상태를 보였지만, validation loss도 함께 감소했기 때문에 추가 학습은 실제 검증 성능 개선으로도 이어졌다.
+최종 저장 시점의 train loss는 3.9407, validation loss는 4.5587이었다. 두 loss 사이에 약 0.62 차이가 있어 모델이 학습 데이터에 더 잘 맞춰진 신호는 있었다. 다만 validation loss도 6.1680에서 4.5587까지 감소했기 때문에, 전형적인 과적합보다는 후반부 개선 폭이 작아진 상태로 해석했다.
 
 최종 best checkpoint는 다음과 같다.
 
@@ -260,7 +260,7 @@ Validation loss는 계속 감소했지만 후반으로 갈수록 감소 속도�
 
 그래프는 `checkpoints/basic_monitor_history.json`의 loss 기록을 사용해 작성했다.
 
-해당 그래프에서 train loss는 계속 감소하지만 validation loss 평균은 후반부로 갈수록 거의 평평해진다. 추가 학습 대비 개선 폭이 매우 작아진 plateau 구간으로 보았고, 이후에는 epoch를 더 늘리는 것보다 모델 크기, learning rate, regularization을 조정하는 실험이 더 중요해졌다.
+해당 그래프에서 train loss는 계속 감소하지만 validation loss 평균은 후반부로 갈수록 거의 평평해진다. 추가 학습 대비 개선 폭이 매우 작아진 구간으로 보았고, 이후에는 epoch를 더 늘리는 것보다 모델 크기, learning rate, regularization을 조정하는 실험이 더 중요해졌다.
 
 ### 7.4 최종 모델 생성 샘플
 
@@ -325,7 +325,7 @@ prompt: 스토리는
 
 vocab_size 실험은 tokenization 단위와 cross entropy의 클래스 수가 함께 달라지므로 다른 항목과 같은 방식으로 loss 숫자를 비교하지 않았다. 따라서 8.5의 vocab_size 결과는 hyperparameter 선택 근거가 아니라 참고 실험으로 분리했다.
 
-개별 그래프는 각 항목 아래에 함께 배치했다. 그래프는 한눈에 경향을 보기 위한 용도이고, 표는 정확한 수치를 확인하기 위한 용도다.
+개별 그래프는 각 항목 아래에 배치했다. 그래프는 경향을 빠르게 보기 위한 용도이고, 표는 정확한 수치를 확인하기 위한 용도다.
 
 ### 8.1 Activation
 
@@ -338,7 +338,7 @@ vocab_size 실험은 tokenization 단위와 cross entropy의 클래스 수가 �
 | SiLU | 4.9352 | 4.9352 | 50 |
 | Sigmoid | 4.9773 | 4.9773 | 50 |
 
-50 epoch loss만 보면 SiLU가 가장 낮고 GELU가 근소하게 뒤따랐다. Sigmoid는 네 후보 중 가장 높았고, ReLU도 GELU보다 조금 높았다.
+50 epoch loss만 보면 SiLU가 가장 낮고 GELU가 근소하게 뒤따랐다. Sigmoid는 네 후보 중 가장 높았고, ReLU도 GELU보다 조금 높았다. SiLU와 GELU의 차이는 0.0076으로 작고 단일 seed 결과이므로, 이 결과만으로 SiLU가 항상 더 낫다고 결론내리지는 않았다. 본 구현에서는 과제의 GPT FFN 구조를 기준으로 GELU를 유지하고, sigmoid와 ReLU를 피한 이유를 추가로 확인했다.
 
 loss 결과만으로는 각 activation의 차이를 설명하기 어렵기 때문에, sigmoid와 ReLU는 별도 지표로 다시 확인했다. 두 실험 모두 activation만 바꾸고 나머지 설정은 동일하게 유지했다.
 
@@ -375,7 +375,7 @@ ReLU는 sigmoid처럼 gradient 전체가 작아지는 문제가 아니라, `z <=
 
 epoch 30 기준으로 ReLU는 FFN activation의 약 45%가 정확히 0이 되었고, derivative도 약 45%가 0이었다. 반면 GELU는 같은 수준의 음수 `z`를 가지고도 output과 derivative가 정확히 0으로 끊기지 않았다.
 
-정리하면 sigmoid는 gradient 크기가 작아지는 문제가 관찰되었고, ReLU는 음수 입력 경로를 완전히 차단하는 문제가 관찰되었다. 이 실험에서는 GELU가 두 문제를 모두 피하면서 validation loss도 ReLU와 sigmoid보다 낮았다.
+정리하면 sigmoid는 gradient 크기가 작아지는 문제가 관찰되었고, ReLU는 음수 입력 경로를 차단하는 문제가 관찰되었다. 이 실험에서는 GELU가 두 문제를 모두 피하면서 validation loss도 ReLU와 sigmoid보다 낮았다.
 
 ### 8.2 Dropout
 
@@ -587,12 +587,12 @@ data, vocab, checkpoint, ablation 결과 JSON은 로컬 실험 산출물이며 `
 
 ## 11. 결론
 
-1. byte-level BPE부터 GPT model, pretraining loop, classifier fine-tuning module까지 과제 핵심 구현을 완료했다.
+1. byte-level BPE부터 GPT model, pretraining loop, classifier fine-tuning module까지 과제 핵심 구현을 마쳤다.
 2. 단위 테스트와 전체 테스트를 모두 통과했다.
 3. 작은 설정에서 파이프라인 동작을 확인한 뒤 Basic 학습을 진행했다.
 4. Basic 모델은 epoch 1392에서 validation loss 4.5587까지 감소했다.
-5. 900 epoch 이후에는 100 epoch 구간 평균 validation loss 감소량이 0.002 안팎으로 줄어 plateau에 가까운 흐름을 보였다.
-6. 50 epoch ablation에서 activation은 SiLU 4.9352, GELU 4.9428로 가까웠고, Sigmoid는 4.9773으로 가장 높았다.
+5. 900 epoch 이후에는 100 epoch 구간 평균 validation loss 감소량이 0.002 안팎으로 줄어 수렴에 가까운 흐름을 보였다.
+6. 50 epoch ablation에서 activation은 SiLU 4.9352, GELU 4.9428로 가까웠고, Sigmoid는 4.9773으로 가장 높았다. GELU는 sigmoid의 작은 gradient 문제와 ReLU의 0으로 끊기는 경로 문제를 피하는 근거도 확인했다.
 7. learning_rate 1e-3, context_length 64, emb_dim 256, n_layers 4, batch_size 16은 Basic 값보다 낮은 validation loss를 보여 다음 조합 실험 후보로 남겼다.
 8. dropout 0.1은 세 후보 중 가장 낮았고, dropout 0.0은 epoch 20 이후 validation loss가 다시 증가했다.
 9. fine-tuning은 subset 기준 validation accuracy 0.8003, test accuracy 0.8022를 기록했고, 사전학습 효과의 크기는 별도 baseline 비교가 필요하다.
