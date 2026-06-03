@@ -8,7 +8,7 @@
 | 담당자 | 모두 |
 | 프로젝트 | PyTorch 기반 mini GPT 직접 구현 |
 | 실험 환경 | 로컬 GPU 환경 |
-| 최종 작성일 | 2026-06-02 |
+| 최종 작성일 | 2026-06-03 |
 
 ---
 
@@ -35,6 +35,7 @@
 | 사전학습 | Basic 모델 validation loss가 6.1680에서 4.5587까지 감소 |
 | 수렴성 | 100 epoch 구간 평균 기준, 후반부 validation loss 개선 폭이 0.002 안팎으로 축소 |
 | ablation | 50 epoch 비교 실험에서 learning_rate 1e-3, context_length 64, emb_dim 256, n_layers 4, batch_size 16이 낮은 validation loss를 보임 |
+| activation 분석 | sigmoid는 FFN `dL/dW`가 작게 몰렸고, ReLU는 output과 derivative가 0인 구간이 크게 나타남 |
 | fine-tuning | subset 기준 NSMC validation accuracy 0.8003, test accuracy 0.8022 |
 
 ---
@@ -160,11 +161,7 @@ Basic 모델의 전체 parameter 수는 924,416개다. 모듈별로 나누면 em
 
 ### 7.1 Basic full 실험
 
-Basic 실험은 최적 hyperparameter를 찾기 위한 최종 모델이 아니라, 과제 구현이 실제 학습으로 이어지는지 확인하고 이후 비교 실험의 출발점으로 삼기 위한 기준 실험이다. 학습을 완료한 뒤에는 50 epoch ablation 결과와 실제 로그를 함께 보며 설정별 차이를 정리했다. 아래 그래프에서 주황색 막대는 Basic 설정, 초록색 막대는 각 카테고리에서 가장 낮은 final validation loss를 보인 값이다. vocab_size는 loss scale이 달라지는 항목이라 이 요약 그래프에서 제외하고 8.5에서 참고 실험으로 따로 다룬다.
-
-![50 epoch ablation summary](figures/ablation50_summary.png)
-
-그래프의 값은 50 epoch 비교 실험의 final validation loss다. dropout 0.1은 세 후보 중 가장 낮았고, learning_rate 1e-3, context_length 64, emb_dim 256, n_layers 4, batch_size 16은 Basic 값보다 낮은 validation loss를 보였다. 이 값들은 Basic 모델을 사후에 대체했다는 뜻이 아니라, 다음 조합 실험에서 우선 확인할 후보로 해석했다. 아래 표에서 `train tokens`, `validation tokens`, `train batches`, `validation batches`, `소요 시간`은 직접 고른 hyperparameter가 아니라 선택한 데이터와 설정에서 나온 결과값이다.
+Basic 실험은 최적 hyperparameter를 찾기 위한 최종 모델이 아니라, 과제 구현이 실제 학습으로 이어지는지 확인하고 이후 비교 실험의 출발점으로 삼기 위한 기준 실험이다. 학습을 완료한 뒤에는 50 epoch ablation 결과와 실제 로그를 함께 보며 설정별 차이를 정리했다. 아래 표에서 `train tokens`, `validation tokens`, `train batches`, `validation batches`, `소요 시간`은 직접 고른 hyperparameter가 아니라 선택한 데이터와 설정에서 나온 결과값이다.
 
 | 항목 | 값 | 수치 근거 |
 | --- | --- | --- |
@@ -341,7 +338,44 @@ vocab_size 실험은 tokenization 단위와 cross entropy의 클래스 수가 �
 | SiLU | 4.9352 | 4.9352 | 50 |
 | Sigmoid | 4.9773 | 4.9773 | 50 |
 
-SiLU가 가장 낮았고 GELU가 근소하게 뒤따랐다. Sigmoid는 네 후보 중 가장 높았다.
+50 epoch loss만 보면 SiLU가 가장 낮고 GELU가 근소하게 뒤따랐다. Sigmoid는 네 후보 중 가장 높았고, ReLU도 GELU보다 조금 높았다.
+
+loss 결과만으로는 각 activation의 차이를 설명하기 어렵기 때문에, sigmoid와 ReLU는 별도 지표로 다시 확인했다. 두 실험 모두 activation만 바꾸고 나머지 설정은 동일하게 유지했다.
+
+#### Sigmoid를 피한 근거
+
+sigmoid는 출력이 0~1 사이로 눌리고, 입력 절댓값이 커질수록 미분값이 작아진다. 그래서 FFN 첫 번째 Linear layer의 weight gradient `dL/dW`가 얼마나 작아지는지 확인했다.
+
+아래 그래프에서 볼 것은 세 가지다. 왼쪽과 가운데는 `dL/dW`의 평균 크기와 p99 크기이고, 오른쪽은 거의 0에 가까운 gradient 비율이다.
+
+![Sigmoid gradient comparison](figures/activation_dldw_zoomed_stats.png)
+
+| epoch 30 지표 | GELU | sigmoid | 해석 |
+| --- | ---: | ---: | --- |
+| mean abs(dL/dW) | 4.03e-04 | 7.78e-05 | GELU가 5.17배 큼 |
+| p99 abs(dL/dW) | 1.61e-03 | 2.91e-04 | GELU가 5.53배 큼 |
+| abs(dL/dW) `< 1e-5` | 0.018 | 0.086 | sigmoid가 0 근처 gradient를 더 많이 만듦 |
+
+epoch 30 기준으로 sigmoid는 GELU보다 gradient 크기가 작고, 0 근처 gradient 비율은 더 높았다. 이 결과는 sigmoid가 FFN weight에 전달하는 학습 신호를 더 약하게 만들 수 있음을 보여준다.
+
+#### ReLU를 피한 근거
+
+ReLU는 sigmoid처럼 gradient 전체가 작아지는 문제가 아니라, `z <= 0` 구간에서 output과 derivative가 정확히 0이 되는 문제가 있다. 따라서 ReLU는 `dL/dW` 평균보다 activation output과 derivative가 0이 되는 비율을 보는 것이 더 직접적이다.
+
+아래 그래프에서 왼쪽은 activation output이 정확히 0인 비율이고, 오른쪽은 activation derivative가 정확히 0인 비율이다.
+
+![ReLU gate-off comparison](figures/activation_relu_gelu_report_gate_zero.png)
+
+| epoch 30 지표 | GELU | ReLU | 해석 |
+| --- | ---: | ---: | --- |
+| `z <= 0` | 0.444 | 0.450 | FFN pre-activation의 음수 비율은 비슷함 |
+| activation output `== 0` | 0.000 | 0.450 | ReLU는 음수 구간의 출력을 끊음 |
+| activation derivative `== 0` | 0.000 | 0.450 | ReLU는 음수 구간의 gradient 경로도 끊음 |
+| final val_loss | 6.7687 | 6.7906 | 같은 소규모 비교에서 GELU가 조금 낮음 |
+
+epoch 30 기준으로 ReLU는 FFN activation의 약 45%가 정확히 0이 되었고, derivative도 약 45%가 0이었다. 반면 GELU는 같은 수준의 음수 `z`를 가지고도 output과 derivative가 정확히 0으로 끊기지 않았다.
+
+정리하면 sigmoid는 gradient 크기가 작아지는 문제가 관찰되었고, ReLU는 음수 입력 경로를 완전히 차단하는 문제가 관찰되었다. 이 실험에서는 GELU가 두 문제를 모두 피하면서 validation loss도 ReLU와 sigmoid보다 낮았다.
 
 ### 8.2 Dropout
 
