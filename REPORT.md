@@ -607,3 +607,13 @@ data, vocab, checkpoint, ablation 결과 JSON은 로컬 실험 산출물이며 `
 - fine-tuning은 subset 기준으로만 측정했으므로, 전체 데이터 기준 accuracy를 추가로 확인할 수 있다.
 - fine-tuning 결과에서 사전학습 효과를 분리하려면 random initialization backbone 또는 frozen backbone baseline과 비교해야 한다.
 - 다음 실험에서는 `learning_rate=1e-3`, `context_length=64`, `emb_dim=256`, `n_layers=4`, `batch_size=16`을 단계적으로 조합해 검증하는 것이 좋다.
+
+추가로 입증할 수 있는 항목은 다음과 같다. 아래 항목은 현재 보고서의 결론을 보강하기 위한 후보이며, 완료된 실험으로 해석하지 않는다.
+
+| 우선순위 | 확인할 주장 | 확인 방법 | 기대되는 해석 |
+| ---: | --- | --- | --- |
+| 1 | dropout 0.0은 후반에 validation 성능이 나빠질 수 있다 | dropout별 train loss와 validation loss를 같은 그래프에 표시 | train loss는 계속 감소하지만 validation loss가 다시 상승하면 과적합 신호로 볼 수 있다 |
+| 2 | 이어 학습에서는 model뿐 아니라 AdamW optimizer state도 복원해야 한다 | 15 epoch 연속 학습, 5 epoch씩 optimizer state 포함 재개, 5 epoch씩 model weight만 재개를 비교 | optimizer state를 버리면 같은 총 epoch라도 loss 흐름이 달라질 수 있다 |
+| 3 | vocab_size별 cross entropy loss는 직접 비교하기 어렵다 | vocab_size별 validation loss와 bits-per-byte를 함께 계산 | vocab_size가 token 수와 class 수를 바꾸므로 loss 숫자만으로 tokenizer를 고르면 안 된다 |
+| 4 | learning_rate 1e-3은 50 epoch에서는 빠르지만 장기 안정성 확인이 필요하다 | learning_rate별 train/validation curve를 더 긴 epoch로 비교 | 초반 loss가 낮아도 후반부 변동이나 상승이 있으면 기준값을 다시 조정해야 한다 |
+| 5 | context_length 64는 loss는 낮지만 긴 문맥 생성에서는 불리할 수 있다 | context_length별 validation loss와 동일 prompt 생성 샘플 비교 | 짧은 context가 loss는 낮아도 긴 문장 생성 품질까지 보장하지는 않는다 |
