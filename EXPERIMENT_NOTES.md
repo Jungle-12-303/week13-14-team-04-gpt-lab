@@ -1044,25 +1044,101 @@ figure:
 
 ### Number of layers
 
-실험 전 가설:
+`n_layers`는 GPT 안에 TransformerBlock을 몇 층 쌓을지 정하는 값이다. 레이어가 많아질수록 모델은 더 복잡한 패턴을 표현할 수 있지만, 학습 시간과 메모리 사용량도 함께 늘어난다.
 
-- 작성 예정
+값이 작으면 모델이 가볍고 빠르다.
 
-비교 후보:
-
-| label | n_layers | final train loss | final val loss | best val loss | 메모 |
-|---|---:|---:|---:|---:|---|
-|  |  |  |  |  |  |
-
-figure:
-
-```markdown
-![n layers](figures/ablation50/파일명.png)
+```text
+n_layers = 1
+학습과 추론은 빠르지만 표현력이 부족할 수 있음
 ```
 
-결론:
+값이 적당히 커지면 문맥을 더 여러 단계로 처리할 수 있어 validation loss가 좋아질 수 있다.
 
-- 작성 예정
+```text
+n_layers = 4 ~ 6
+현재 실험 범위에서는 레이어 수가 늘어날수록 validation loss가 낮아졌음
+```
+
+하지만 레이어가 너무 많아지면 계산량이 커지고, 작은 데이터에서는 train loss만 낮아지고 validation loss는 나빠지는 과적합이 생길 수 있다. 따라서 최종 선택은 validation loss와 학습 비용을 함께 고려해야 한다.
+
+이번 실험은 앞에서 찾은 현재 최적 후보를 기준으로 진행했다.
+
+```text
+drop_rate = 0.14
+learning_rate = 5e-3
+optimizer = AdamW
+weight_decay = 0.06
+context_length = 80
+vocab_size = 300
+emb_dim = 320
+```
+
+실험 전 가설:
+
+- 레이어가 너무 적으면 모델 표현력이 부족해서 validation loss가 높을 수 있다.
+- 레이어를 늘리면 loss가 내려갈 수 있지만, 어느 지점부터는 계산 비용 대비 개선폭이 작아질 수 있다.
+- 너무 깊은 모델은 학습 시간이 길어지고 과적합 가능성도 커질 수 있다.
+- 현재 작은 GPT 설정에서는 `1~6` 범위에서 먼저 확인하고, loss가 계속 좋아지면 더 큰 값은 추가 실험으로 남긴다.
+
+#### 1~3층 중간 결과
+
+먼저 `1`, `2`, `3`층의 20 epoch 시점 loss를 확인했다. 이 구간에서는 레이어 수가 늘어날수록 train loss와 validation loss가 모두 낮아졌다.
+
+| label | n_layers | train loss | val loss | 메모 |
+|---|---:|---:|---:|---|
+| layers_1 | 1 | 1.9924 | 1.9339 | 20 epoch 시점 기준 |
+| layers_2 | 2 | 1.8660 | 1.8247 | 20 epoch 시점 기준 |
+| layers_3 | 3 | 1.8278 | 1.7951 | 20 epoch 시점 기준 |
+
+해석:
+
+- `1 -> 2 -> 3`으로 갈수록 validation loss가 계속 낮아졌다.
+- 현재 설정에서는 1층 모델은 표현력이 부족해 보이고, 2층보다 3층이 더 좋은 결과를 보였다.
+- 따라서 4층 이상도 확인할 필요가 있었다.
+
+#### 4~6층 50 epoch 비교
+
+`4`, `5`, `6`층을 50 epoch 기준으로 비교했다. 최종 validation loss 기준으로 `layers_6`이 가장 낮았다.
+
+![number of layers](figures/ablation50/ablation50_n_layers_20260603_235248_549.png)
+
+결과 파일:
+
+- `figures/ablation50/ablation50_n_layers_20260603_235248_549.png`
+
+| label | n_layers | final val loss | 메모 |
+|---|---:|---:|---|
+| layers_4 | 4 | 1.7653 | 4~6 중 가장 높음 |
+| layers_5 | 5 | 1.7631 | 4층보다 조금 개선 |
+| layers_6 | 6 | 1.7413 | 1~6 범위에서 가장 낮은 validation loss |
+
+해석:
+
+- `layers_4`, `layers_5`, `layers_6` 중에서는 `layers_6`이 가장 낮은 final validation loss를 보였다.
+- 앞선 `1~3` 결과에서도 레이어 수가 늘어날수록 validation loss가 낮아졌고, `4~6` 구간에서도 같은 방향의 개선이 이어졌다.
+- 따라서 현재 실험에서 나온 loss 값만 기준으로 보면 `n_layers=6`이 가장 좋은 후보가 맞다.
+- 다만 레이어 수가 늘어나면 학습 시간, 추론 시간, 메모리 사용량이 증가한다. 이후 더 큰 값인 `8` 등을 실험한다면 validation loss 개선폭과 계산 비용을 함께 비교해야 한다.
+
+## Number of layers 현재 결론
+
+현재 `1~6` 범위의 n_layers 실험에서는 `n_layers=6`이 가장 낮은 validation loss를 보여 최적 후보로 판단된다.
+
+```text
+best so far:
+drop_rate = 0.14
+learning_rate = 5e-3
+optimizer = AdamW
+weight_decay = 0.06
+context_length = 80
+vocab_size = 300
+emb_dim = 320
+n_layers = 6
+
+final val loss = 1.7413
+```
+
+정리하면, 성능 지표만 보면 현재 실험 범위 안에서는 `n_layers=6`이 가장 좋다. 단, 레이어가 많아질수록 계산 비용이 커지므로 최종 선택에서는 loss 개선폭과 학습 시간을 함께 고려한다.
 
 ### 그 외 메모
 
