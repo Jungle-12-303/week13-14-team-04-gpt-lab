@@ -177,11 +177,11 @@ GELU는 sigmoid와 ReLU의 한계를 피하는 activation으로 해석했다.
 
 epoch 30 기준:
 
-| 지표 | GELU | sigmoid | 해석 |
-| --- | ---: | ---: | --- |
-| mean abs(dL/dW) | 4.03e-04 | 7.78e-05 | GELU가 5.17배 큼 |
-| p99 abs(dL/dW) | 1.61e-03 | 2.91e-04 | GELU가 5.53배 큼 |
-| abs(dL/dW) `< 1e-5` | 0.018 | 0.086 | sigmoid가 0 근처 gradient를 더 많이 만듦 |
+| 지표 | GELU | sigmoid |
+| --- | ---: | ---: |
+| mean abs(dL/dW) | 4.03e-04 | 7.78e-05 |
+| p99 abs(dL/dW) | 1.61e-03 | 2.91e-04 | 
+| abs(dL/dW) `< 1e-5` | 0.018 | 0.086 |
 
 ReLU는 음수 구간에서 역전파 신호를 끊는 문제가 있었다.
 
