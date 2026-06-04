@@ -95,49 +95,6 @@ validation_loss: 4.5587
 
 따라서 이 결과는 학습이 정상적으로 진행됐고, 후반부로 갈수록 추가 개선 폭이 작아지는 수렴 양상을 보였다고 해석했다.
 
-추가로 팀원이 제안한 후보 파라미터 조합도 학습했다.
-
-![Base candidate loss comparison](figures/basic_vs_candidate_loss_comparison.png)
-
-후보 조합:
-
-| 항목 | 베이스 | 후보 조합 |
-| --- | ---: | ---: |
-| vocab_size | 2000 | 300 |
-| context_length | 128 | 80 |
-| emb_dim | 128 | 320 |
-| n_layers | 2 | 13 |
-| n_heads | 4 | 32 |
-| drop_rate | 0.1 | 0.14 |
-| learning_rate | 3e-4 | 5e-3 |
-| weight_decay | 0 | 0.06 |
-| 학습 epoch | 1392 | 250 |
-| best validation loss | 4.5587 | 1.6420 |
-| best epoch | 1392 | 225 |
-
-후보 조합 best checkpoint 생성 샘플:
-
-```text
-checkpoint: checkpoints/candidate_v300_e320_l13_h32_best.pt
-best epoch: 225
-best validation loss: 1.6420
-
-prompt: 영화가
-영화가왜이라는걸 개봉한거지?
-마지막에 한번은 찾았다 ㅋㅋ
-시나리오 죽여야 하는거다
-순수한 여인과 함께했던 영화.
-오히려 너무나 수작이다.
-
-prompt: 정말
-정말좋은영화네요
-아..음.. 신기했던 영화.. 이걸 보면서 울고싶다....
-개실망 역시 무로충!
-평점이 아깝다!
-```
-
-후보 조합은 베이스에서 파라미터를 조정해 만든 튜닝 모델이다. 따라서 이 그래프와 생성 샘플은 파라미터 튜닝 후 모델 출력이 어떻게 달라졌는지 보여주는 결과로 사용했다.
-
 같은 full data 기준으로 dropout 500 epoch 비교도 진행했다.
 
 ![Full-data dropout validation loss](figures/dropout_full500_val_loss.png)
